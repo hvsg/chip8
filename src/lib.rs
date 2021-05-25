@@ -20,6 +20,8 @@ pub const SCREEN_WIDTH: usize = 64;
 pub const SCREEN_HEIGHT: usize = 32;
 /// Number of Pixels
 pub const NUM_PIXELS: usize = SCREEN_WIDTH * SCREEN_HEIGHT;
+/// Size in bytes of program counter
+pub const ADDR_SIZE: u16 = 2;
 
 /// Contains 16-bit register addresses
 #[repr(usize)]
@@ -71,10 +73,14 @@ pub struct Chip8 {
 
 impl Chip8 {
     pub fn new() -> Self {
-        Self {
+        let mut s = Self {
             memory: [0; MEMORY_SIZE],
             display: [0; NUM_PIXELS],
-        }
+        };
+        // Initialize registers
+        s.write_reg16(Reg16::PC, 0x0600);
+        s.write_reg8(Reg8::SP, (STACK_ADDR - ADDR_SIZE as usize) as u8);
+        s
     }
 
     fn clear_screen(&mut self) {
@@ -144,16 +150,20 @@ impl Chip8 {
         } else if i == 0x00EE {
             // RET
             let sp = self.read_reg8(Reg8::SP);
+            // Check if stack is empty
+            if sp < STACK_ADDR as u8 {
+                panic!("Chip-8: Stack Underflow");
+            }
             self.write_reg16(Reg16::PC, sp as u16);
-            self.write_reg8(Reg8::SP, sp - 2);
+            self.write_reg8(Reg8::SP, sp - ADDR_SIZE as u8);
         } else if i & 0xF000 == 0x1000 {
             // JP addr
             self.write_reg16(Reg16::PC, 0x0FFF & i);
         } else if i & 0xF000 == 0x2000 {
             // CALL addr
             let mut sp = self.read_reg8(Reg8::SP);
-            // check if maximum stack levels exceeded
-            sp += 2;
+            // check if stack is full
+            sp += ADDR_SIZE as u8;
             if sp > STACK_LAST_ADDR as u8 {
                 panic!("Chip-8: Stack Overflow");
             }
@@ -172,7 +182,7 @@ impl Chip8 {
             // Skip istruction
             if self.read_reg8(vx) == lower {
                 let pc = self.read_reg16(Reg16::PC);
-                self.write_reg16(Reg16::PC, pc + 2);
+                self.write_reg16(Reg16::PC, pc + 2*ADDR_SIZE);
             }
         } else if i & 0xF000 == 0x4000 {
             // Skip if register Vx neq to lower byte
@@ -182,7 +192,7 @@ impl Chip8 {
             // Skip istruction
             if self.read_reg8(vx) != lower {
                 let pc = self.read_reg16(Reg16::PC);
-                self.write_reg16(Reg16::PC, pc + 2);
+                self.write_reg16(Reg16::PC, pc + 2*ADDR_SIZE);
             }
         } else if i & 0xF000 == 0x5000 {
             // Skip if Vx == Vy
@@ -190,7 +200,7 @@ impl Chip8 {
             let vy = to_general_reg8(((i & 0x00F0) >> 4) as usize);
             if self.read_reg8(vx) == self.read_reg8(vy) {
                 let pc = self.read_reg16(Reg16::PC);
-                self.write_reg16(Reg16::PC, pc + 2);
+                self.write_reg16(Reg16::PC, pc + 2*ADDR_SIZE);
             }
         } else if i & 0xF000 == 0x6000 {
             // Put lower byte value into Vx
@@ -293,7 +303,6 @@ impl Chip8 {
                 let mut byte = self.read8(sprite.saturating_add(j as u16) as usize);
                 // assuming that vx,vy corresponds to first byte (top-left corner) of sprite
                 for k in 0..8 {
-                    // TODO: draw sprite and update erased
                     let draw_x = x.overflowing_add(k).0;
                     erased |= self.draw(draw_x as usize, draw_y as usize, byte & (0x1 << 7));
                     byte <<= 1;
