@@ -11,7 +11,7 @@ pub const STACK_ADDR: usize = Reg8::ST as usize;
 /// Number of bytes used for the stack
 pub const STACK_SIZE: usize = 16 * 2;
 /// Stack address should be less than this address
-pub const STACK_END_ADDR: usize = STACK_ADDR + STACK_SIZE;
+pub const STACK_LAST_ADDR: usize = STACK_ADDR + STACK_SIZE - 2;
 
 /// Contains 16-bit register addresses
 #[repr(usize)]
@@ -103,13 +103,31 @@ impl Chip8 {
 
     /// Execute instruction i
     fn execute_instruction(&mut self, i: u16) {
-        if i == 0x00E0 {
+        if i == 0x00E0 { // CLS
             // TODO: Clear screen
         }
-        else if i == 0x00EE {
+        else if i == 0x00EE { // RET
             let sp = self.read_reg8(Reg8::SP);
             self.write_reg16(Reg16::PC, sp as u16);
-            self.write_reg8(Reg8::SP, sp - 1);
+            self.write_reg8(Reg8::SP, sp - 2);
+        }
+        else if i & 0xF000 == 0x1000 { // JP addr
+            self.write_reg16(Reg16::PC, 0x0FFF & i);
+        }
+        else if i & 0xF000 == 0x2000 { // CALL addr
+            let mut sp = self.read_reg8(Reg8::SP);
+            // check if maximum stack levels exceeded
+            sp += 2;
+            if sp > STACK_LAST_ADDR as u8 {
+                panic!("Chip-8: Stack Overflow");
+            }
+            // Increment stack pointer
+            self.write_reg8(Reg8::SP, sp);
+            // Put current PC on top of stack
+            let pc = self.read_reg16(Reg16::PC);
+            self.write16(sp as usize, pc);
+            // Update PC
+            self.write_reg16(Reg16::PC, 0x0FFF & i);
         }
     }
 
