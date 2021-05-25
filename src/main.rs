@@ -52,22 +52,53 @@ impl Chip8 {
         }
     }
 
-    /// Access 8 bit register at address
-    fn reg8(&mut self, address: Register) -> &mut u8 {
-        &mut self.memory[address as usize]
+    /// Read 8 bit value at address
+    fn read8(&self, address: Register) -> u8 {
+        self.memory[address as usize]
+    }
+
+    /// Write 8 bit value at address
+    fn write8(&mut self, address: Register, value: u8) {
+        self.memory[address as usize] = value;
+    }
+
+    /// Execute instruction i
+    fn execute_instruction(&mut self, i: u16) {
+
+    }
+    
+    /// Read 16 bit value at address
+    fn read16(&self, address: usize) -> u16 {
+        let upper = self.memory[address];
+        let lower = self.memory[address + 1];
+        u16::from_be_bytes([upper, lower])
+    }
+
+    /// Write 16 bit value at address
+    fn write16(&mut self, address: usize, value: u16) {
+        let bytes = value.to_be_bytes();
+        self.memory[address] = bytes[0];
+        self.memory[address + 1] = bytes[1];
     }
 
     /// Call at 60 Hz
     fn update(&mut self) {
+
+        // Update program counter
+        let pc = self.read16(PC_ADDR);
+        let instruction = self.read16(pc as usize);
+        self.execute_instruction(instruction);
         
         // Delay Timer
-        if *self.reg8(Register::DT) > 0 {
-            *self.reg8(Register::DT) -= 1;
+        let dt = self.read8(Register::DT);
+        if dt > 0 {
+            self.write8(Register::DT, dt - 1);
         }
         
         // Sound Timer
-        if *self.reg8(Register::ST) > 0 {
-            *self.reg8(Register::ST) -= 1;
+        let st = self.read8(Register::ST);
+        if st > 0 {
+            self.write8(Register::ST, st - 1);
             // TODO: Play tone
         }
     }
