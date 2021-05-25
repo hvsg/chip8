@@ -360,10 +360,11 @@ impl Chip8 {
 
     /// Call at 60 Hz
     pub fn update(&mut self) {
-        // Update program counter
-        let pc = self.read_reg16(Reg16::PC);
-        let instruction = self.read16(pc as usize);
+        // Execute instruction at program counter
+        let instruction = self.read16(self.read_reg16(Reg16::PC) as usize);
         self.execute_instruction(instruction);
+        // Advance program counter
+        self.write_reg16(Reg16::PC, self.read_reg16(Reg16::PC) + ADDR_SIZE);
 
         // Delay Timer
         let dt = self.read_reg8(Reg8::DT);
