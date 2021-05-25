@@ -4,22 +4,27 @@
 const MAX_ADDR: usize = 0xFFF;
 /// Size of the memory space in bytes
 const MEMORY_SIZE: usize = MAX_ADDR + 1;
-/// Program Counter, 16 bits:
-/// upper 8 bits at 0x0, lower 8 bits at 0x01
-const PC_ADDR: usize = 0x0;
 /// Stack Pointer
-const SP_ADDR: usize = 0x2;
+const SP_ADDR: usize = Reg16::I as usize + 2;
 /// Base address of the stack
-const STACK_ADDR: usize = Register::ST as usize;
+const STACK_ADDR: usize = Reg8::ST as usize;
 /// Number of bytes used for the stack
 const STACK_SIZE: usize = 16 * 2;
 /// Stack address should be less than this address
 const STACK_END_ADDR: usize = STACK_ADDR + STACK_SIZE;
 
+/// Contains 16-bit register addresses
+#[repr(usize)]
+enum Reg16 {
+    PC = 0x0,
+    I = 0x02
+}
+
 /// Contains 8-bit register addresses
 #[repr(usize)]
-enum Register {
-    V0 = SP_ADDR + 1,
+enum Reg8 {
+    SP = SP_ADDR,
+    V0,
     V1,
     V2,
     V3,
@@ -52,21 +57,36 @@ impl Chip8 {
         }
     }
 
+    /// Read 8-bit register
+    fn read_reg8(&self, register: Reg8) -> u8 {
+        self.read8(register as usize)
+    }
+
+    /// Write 8-bit register
+    fn write_reg8(&mut self, register: Reg8, value: u8) {
+        self.write8(register as usize, value);
+    }
+    
+    /// Read 16-bit register
+    fn read_reg16(&self, register: Reg16) -> u16 {
+        self.read16(register as usize)
+    }
+
+    /// Write 16-bit reigster
+    fn write_reg16(&mut self, register: Reg16, value: u16) {
+        self.write16(register as usize, value);
+    }
+
     /// Read 8 bit value at address
-    fn read8(&self, address: Register) -> u8 {
+    fn read8(&self, address: usize) -> u8 {
         self.memory[address as usize]
     }
 
     /// Write 8 bit value at address
-    fn write8(&mut self, address: Register, value: u8) {
+    fn write8(&mut self, address: usize, value: u8) {
         self.memory[address as usize] = value;
     }
 
-    /// Execute instruction i
-    fn execute_instruction(&mut self, i: u16) {
-
-    }
-    
     /// Read 16 bit value at address
     fn read16(&self, address: usize) -> u16 {
         let upper = self.memory[address];
@@ -81,24 +101,36 @@ impl Chip8 {
         self.memory[address + 1] = bytes[1];
     }
 
+    /// Execute instruction i
+    fn execute_instruction(&mut self, i: u16) {
+        if i == 0x00E0 {
+            // TODO: Clear screen
+        }
+        else if i == 0x00EE {
+            let sp = self.read_reg8(Reg8::SP);
+            self.write_reg16(Reg16::PC, sp as u16);
+            self.write_reg8(Reg8::SP, sp - 1);
+        }
+    }
+
     /// Call at 60 Hz
     fn update(&mut self) {
 
         // Update program counter
-        let pc = self.read16(PC_ADDR);
+        let pc = self.read_reg16(Reg16::PC);
         let instruction = self.read16(pc as usize);
         self.execute_instruction(instruction);
         
         // Delay Timer
-        let dt = self.read8(Register::DT);
+        let dt = self.read_reg8(Reg8::DT);
         if dt > 0 {
-            self.write8(Register::DT, dt - 1);
+            self.write_reg8(Reg8::DT, dt - 1);
         }
         
         // Sound Timer
-        let st = self.read8(Register::ST);
+        let st = self.read_reg8(Reg8::ST);
         if st > 0 {
-            self.write8(Register::ST, st - 1);
+            self.write_reg8(Reg8::ST, st - 1);
             // TODO: Play tone
         }
     }
