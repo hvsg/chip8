@@ -44,6 +44,13 @@ pub enum Reg8 {
     ST,
 }
 
+/// Convert unsize to general purpose register (V0-VF)
+fn to_general_reg8(x: usize) -> Reg8 {
+    assert!(x >= Reg8::V0 as usize);
+    assert!(x <= Reg8::VF as usize);
+    unsafe { std::mem::transmute(x)}
+}
+
 /// Data structure for the Chip-8 Interpreter
 pub struct Chip8 {
     // RAM
@@ -128,6 +135,45 @@ impl Chip8 {
             self.write16(sp as usize, pc);
             // Update PC
             self.write_reg16(Reg16::PC, 0x0FFF & i);
+        }
+        else if i & 0xF000 == 0x3000 { // Skip if register Vx equals lower byte
+            let x = (i & 0x0F00) >> 8;
+            let vx = to_general_reg8(x as usize);
+            let lower: u8 = (0x00FF & i) as u8;
+            // Skip istruction
+            if self.read_reg8(Vx) == lower {
+                let pc = self.read_reg16(Reg16::PC);
+                self.write_reg16(Reg16::PC, pc + 2);
+            }
+        }
+        else if i & 0xF000 == 0x4000 { // Skip if register Vx neq to lower byte
+            let x = (i & 0x0F00) >> 8;
+            let vx = to_general_reg8(x as usize);
+            let lower = (0x00FF & i) as u8;
+            // Skip istruction
+            if self.read_reg8(vx) != lower {
+                let pc = self.read_reg16(Reg16::PC);
+                self.write_reg16(Reg16::PC, pc + 2);
+            }
+        }
+        else if i & 0xF000 == 0x5000 { // Skip if Vx == Vy
+            let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
+            let vy = to_general_reg8(((i & 0x00F0) >> 8) as usize);
+            if self.read_reg8(vx) == self.read_reg8(vy) {
+                let pc = self.read_reg16(Reg16::PC);
+                self.write_reg16(Reg16::PC, pc + 2);
+            }
+        }
+        else if i & 0xF000 == 0x6000 { // Put lower byte value into Vx
+            let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
+            let lower= (0x00FF & i) as u8;
+            self.write_reg8(vx, lower);
+        }
+        else if i & 0xF000 == 0x7000 { // Vx += lower
+            let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
+            let lower= (0x00FF & i) as u8;
+            let value = self.read_reg8(vx).overflowing_add(lower).0;
+            self.write_reg8(vx, value);
         }
     }
 
