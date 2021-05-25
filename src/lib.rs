@@ -1,28 +1,28 @@
 /// Big Endian
 /// Each address refers to a single byte
 /// last byte is at index 4095
-const MAX_ADDR: usize = 0xFFF;
+pub const MAX_ADDR: usize = 0xFFF;
 /// Size of the memory space in bytes
-const MEMORY_SIZE: usize = MAX_ADDR + 1;
+pub const MEMORY_SIZE: usize = MAX_ADDR + 1;
 /// Stack Pointer
-const SP_ADDR: usize = Reg16::I as usize + 2;
+pub const SP_ADDR: usize = Reg16::I as usize + 2;
 /// Base address of the stack
-const STACK_ADDR: usize = Reg8::ST as usize;
+pub const STACK_ADDR: usize = Reg8::ST as usize;
 /// Number of bytes used for the stack
-const STACK_SIZE: usize = 16 * 2;
+pub const STACK_SIZE: usize = 16 * 2;
 /// Stack address should be less than this address
-const STACK_END_ADDR: usize = STACK_ADDR + STACK_SIZE;
+pub const STACK_END_ADDR: usize = STACK_ADDR + STACK_SIZE;
 
 /// Contains 16-bit register addresses
 #[repr(usize)]
-enum Reg16 {
+pub enum Reg16 {
     PC = 0x0,
     I = 0x02
 }
 
 /// Contains 8-bit register addresses
 #[repr(usize)]
-enum Reg8 {
+pub enum Reg8 {
     SP = SP_ADDR,
     V0,
     V1,
@@ -45,13 +45,13 @@ enum Reg8 {
 }
 
 /// Data structure for the Chip-8 Interpreter
-struct Chip8 {
+pub struct Chip8 {
     // RAM
     memory: [u8; MEMORY_SIZE],
 }
 
 impl Chip8 {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             memory: [0; MEMORY_SIZE],
         }
@@ -114,7 +114,7 @@ impl Chip8 {
     }
 
     /// Call at 60 Hz
-    fn update(&mut self) {
+    pub fn update(&mut self) {
 
         // Update program counter
         let pc = self.read_reg16(Reg16::PC);
@@ -136,7 +136,3 @@ impl Chip8 {
     }
 }
 
-fn main() {
-    let mut chip8 = Chip8::new();
-    println!("Hello, world!");
-}
