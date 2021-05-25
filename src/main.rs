@@ -51,6 +51,26 @@ impl Chip8 {
             memory: [0; MEMORY_SIZE],
         }
     }
+
+    /// Access 8 bit register at address
+    fn reg8(&mut self, address: Register) -> &mut u8 {
+        &mut self.memory[address as usize]
+    }
+
+    /// Call at 60 Hz
+    fn update(&mut self) {
+        
+        // Delay Timer
+        if *self.reg8(Register::DT) > 0 {
+            *self.reg8(Register::DT) -= 1;
+        }
+        
+        // Sound Timer
+        if *self.reg8(Register::ST) > 0 {
+            *self.reg8(Register::ST) -= 1;
+            // TODO: Play tone
+        }
+    }
 }
 
 fn main() {
