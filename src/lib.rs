@@ -179,20 +179,20 @@ impl Chip8 {
             let x = (i & 0x0F00) >> 8;
             let vx = to_general_reg8(x as usize);
             let lower: u8 = (0x00FF & i) as u8;
-            // Skip istruction
+            // Skip instruction
             if self.read_reg8(vx) == lower {
                 let pc = self.read_reg16(Reg16::PC);
-                self.write_reg16(Reg16::PC, pc + 2*ADDR_SIZE);
+                self.write_reg16(Reg16::PC, pc + ADDR_SIZE);
             }
         } else if i & 0xF000 == 0x4000 {
             // Skip if register Vx neq to lower byte
             let x = (i & 0x0F00) >> 8;
             let vx = to_general_reg8(x as usize);
             let lower = (0x00FF & i) as u8;
-            // Skip istruction
+            // Skip instruction
             if self.read_reg8(vx) != lower {
                 let pc = self.read_reg16(Reg16::PC);
-                self.write_reg16(Reg16::PC, pc + 2*ADDR_SIZE);
+                self.write_reg16(Reg16::PC, pc + ADDR_SIZE);
             }
         } else if i & 0xF000 == 0x5000 {
             // Skip if Vx == Vy
@@ -200,7 +200,7 @@ impl Chip8 {
             let vy = to_general_reg8(((i & 0x00F0) >> 4) as usize);
             if self.read_reg8(vx) == self.read_reg8(vy) {
                 let pc = self.read_reg16(Reg16::PC);
-                self.write_reg16(Reg16::PC, pc + 2*ADDR_SIZE);
+                self.write_reg16(Reg16::PC, pc + ADDR_SIZE);
             }
         } else if i & 0xF000 == 0x6000 {
             // Put lower byte value into Vx
@@ -247,8 +247,7 @@ impl Chip8 {
             // VF = Vx > Vy (!borrow) and Vx -= Vy
             let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
             let vy = to_general_reg8(((i & 0x00F0) >> 4) as usize);
-            let x = self.read_reg8(vx);
-            let y = self.read_reg8(vy);
+
             let (value, borrow) = self.read_reg8(vx).overflowing_sub(self.read_reg8(vy));
             self.write_reg8(vx, value);
             self.write_reg8(Reg8::VF, !borrow as u8);
@@ -273,6 +272,14 @@ impl Chip8 {
             let x = self.read_reg8(vx);
             self.write_reg8(Reg8::VF, x & (0x1 << 7));
             self.write_reg8(vx, x << 1);
+        } else if i & 0xF00F == 0x9000 {
+            // Skip if Vx != Vy
+            let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
+            let vy = to_general_reg8(((i & 0x00F0) >> 4) as usize);
+            if self.read_reg8(vx) != self.read_reg8(vy) {
+                let pc = self.read_reg16(Reg16::PC);
+                self.write_reg16(Reg16::PC, pc + ADDR_SIZE);
+            }
         } else if i & 0xF000 == 0xA000 {
             // I = value
             self.write_reg16(Reg16::I, i & 0x0FFF);
@@ -310,6 +317,44 @@ impl Chip8 {
                 draw_y = draw_y.overflowing_add(1).0;
             }
             self.write_reg8(Reg8::VF, erased);
+        } else if i & 0xF0FF == 0xE09E {
+            // Skip if Vx is pressed
+            unimplemented!();
+        } else if i & 0xF0FF == 0xE0A1 {
+            // Skip if Vx is not pressed
+            unimplemented!()
+        } else if i & 0xF0FF == 0xF007 {
+            // Vx = DT
+            let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
+            let dt = self.read_reg8(Reg8::DT);
+            self.write_reg8(vx, dt);
+        } else if i & 0xF0FF == 0xF00A {
+            // Wait for key press and store key value in Vx
+            unimplemented!()
+        } else if i & 0xF0FF == 0xF015 {
+            // DT = Vx
+            let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
+            self.write_reg8(Reg8::DT, self.read_reg8(vx));
+        } else if i & 0xF0FF == 0xF018 {
+            // ST = Vx
+            let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
+            self.write_reg8(Reg8::ST, self.read_reg8(vx));
+        } else if i & 0xF0FF == 0xF01E {
+            // I += Vx
+            let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
+            let x = self.read_reg8(vx);
+            let value = self.read_reg16(Reg16::I);
+            self.write_reg16(Reg16::I, value.overflowing_add(x as u16).0);
+        } else if i & 0xF0FF == 0xF029 {
+            unimplemented!()
+        } else if i & 0xF0FF == 0xF033 {
+            unimplemented!()
+        } else if i & 0xF0FF == 0xF055 {
+            unimplemented!()
+        } else if i & 0xF0FF == 0xF065 {
+            unimplemented!()
+        } else {
+            panic!("Chip-8: Invalid instruction {:X}", i);
         }
     }
 
