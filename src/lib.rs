@@ -144,9 +144,10 @@ impl Chip8 {
 
     /// Execute instruction i
     fn execute_instruction(&mut self, i: u16) {
-        if i == 0x00E0 {
+        let advance_pc: bool = if i == 0x00E0 {
             // CLS
             self.clear_screen();
+            true
         } else if i == 0x00EE {
             // RET
             let sp = self.read_reg8(Reg8::SP);
@@ -156,9 +157,11 @@ impl Chip8 {
             }
             self.write_reg16(Reg16::PC, sp as u16);
             self.write_reg8(Reg8::SP, sp - ADDR_SIZE as u8);
+            false
         } else if i & 0xF000 == 0x1000 {
             // JP addr
             self.write_reg16(Reg16::PC, 0x0FFF & i);
+            false
         } else if i & 0xF000 == 0x2000 {
             // CALL addr
             let mut sp = self.read_reg8(Reg8::SP);
@@ -174,6 +177,7 @@ impl Chip8 {
             self.write16(sp as usize, pc);
             // Update PC
             self.write_reg16(Reg16::PC, 0x0FFF & i);
+            false
         } else if i & 0xF000 == 0x3000 {
             // Skip if register Vx equals lower byte
             let x = (i & 0x0F00) >> 8;
@@ -182,8 +186,9 @@ impl Chip8 {
             // Skip instruction
             if self.read_reg8(vx) == lower {
                 let pc = self.read_reg16(Reg16::PC);
-                self.write_reg16(Reg16::PC, pc + ADDR_SIZE);
+                self.write_reg16(Reg16::PC, pc + 2 * ADDR_SIZE);
             }
+            false
         } else if i & 0xF000 == 0x4000 {
             // Skip if register Vx neq to lower byte
             let x = (i & 0x0F00) >> 8;
@@ -192,50 +197,58 @@ impl Chip8 {
             // Skip instruction
             if self.read_reg8(vx) != lower {
                 let pc = self.read_reg16(Reg16::PC);
-                self.write_reg16(Reg16::PC, pc + ADDR_SIZE);
+                self.write_reg16(Reg16::PC, pc + 2 * ADDR_SIZE);
             }
+            false
         } else if i & 0xF000 == 0x5000 {
             // Skip if Vx == Vy
             let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
             let vy = to_general_reg8(((i & 0x00F0) >> 4) as usize);
             if self.read_reg8(vx) == self.read_reg8(vy) {
                 let pc = self.read_reg16(Reg16::PC);
-                self.write_reg16(Reg16::PC, pc + ADDR_SIZE);
+                self.write_reg16(Reg16::PC, pc + 2 * ADDR_SIZE);
             }
+            false
         } else if i & 0xF000 == 0x6000 {
             // Put lower byte value into Vx
             let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
             let lower = (0x00FF & i) as u8;
             self.write_reg8(vx, lower);
+            true
         } else if i & 0xF000 == 0x7000 {
             // Vx += lower
             let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
             let lower = (0x00FF & i) as u8;
             let value = self.read_reg8(vx).overflowing_add(lower).0;
             self.write_reg8(vx, value);
+            true
         } else if i & 0xF000 == 0x8000 {
             // Vx = Vy
             let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
             let vy = to_general_reg8(((i & 0x00F0) >> 4) as usize);
             self.write_reg8(vx, self.read_reg8(vy));
+            true
         } else if i & 0xF00F == 0x8001 {
             // Vx |= Vy
             let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
             let vy = to_general_reg8(((i & 0x00F0) >> 4) as usize);
             let value = self.read_reg8(vx) | self.read_reg8(vy);
             self.write_reg8(vx, value);
+            true
         } else if i & 0xF00F == 0x8002 {
             // Vx &= Vy
             let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
             let vy = to_general_reg8(((i & 0x00F0) >> 4) as usize);
             let value = self.read_reg8(vx) & self.read_reg8(vy);
             self.write_reg8(vx, value);
+            true
         } else if i & 0xF00F == 0x8003 {
             // Vx ^= Vy
             let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
             let vy = to_general_reg8(((i & 0x00F0) >> 4) as usize);
             let value = self.read_reg8(vx) ^ self.read_reg8(vy);
             self.write_reg8(vx, value);
+            true
         } else if i & 0xF00F == 0x8004 {
             // Vx  += Vy and VF = carry
             let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
@@ -243,6 +256,7 @@ impl Chip8 {
             let (value, carry) = self.read_reg8(vx).overflowing_add(self.read_reg8(vy));
             self.write_reg8(vx, value);
             self.write_reg8(Reg8::VF, carry as u8);
+            true
         } else if i & 0xF00F == 0x8005 {
             // VF = Vx > Vy (!borrow) and Vx -= Vy
             let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
@@ -251,12 +265,14 @@ impl Chip8 {
             let (value, borrow) = self.read_reg8(vx).overflowing_sub(self.read_reg8(vy));
             self.write_reg8(vx, value);
             self.write_reg8(Reg8::VF, !borrow as u8);
+            true
         } else if i & 0xF00F == 0x8006 {
             // VF = LSB(Vx) and Vx /= 2
             let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
             let x = self.read_reg8(vx);
             self.write_reg8(Reg8::VF, x & 0x1);
             self.write_reg8(vx, x >> 1);
+            true
         } else if i & 0xF00F == 0x8007 {
             // VF = Vy > Vx, Vx = Vy - Vx
             let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
@@ -266,33 +282,39 @@ impl Chip8 {
             let (value, underflow) = y.overflowing_sub(x);
             self.write_reg8(vx, value);
             self.write_reg8(Reg8::VF, !underflow as u8);
+            true
         } else if i & 0xF00F == 0x800E {
             // Vx = Vx << 1 and VF = overflow
             let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
             let x = self.read_reg8(vx);
             self.write_reg8(Reg8::VF, x & (0x1 << 7));
             self.write_reg8(vx, x << 1);
+            true
         } else if i & 0xF00F == 0x9000 {
             // Skip if Vx != Vy
             let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
             let vy = to_general_reg8(((i & 0x00F0) >> 4) as usize);
             if self.read_reg8(vx) != self.read_reg8(vy) {
                 let pc = self.read_reg16(Reg16::PC);
-                self.write_reg16(Reg16::PC, pc + ADDR_SIZE);
+                self.write_reg16(Reg16::PC, pc + 2 * ADDR_SIZE);
             }
+            false
         } else if i & 0xF000 == 0xA000 {
             // I = value
             self.write_reg16(Reg16::I, i & 0x0FFF);
+            true
         } else if i & 0xF000 == 0xB000 {
             // JP V0 + value
             let v0 = self.read_reg8(Reg8::V0);
             self.write_reg16(Reg16::PC, (i & 0x0FFF) + v0 as u16);
+            false
         } else if i & 0xF000 == 0xC000 {
             //  Vx = random & lower
             let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
             let x = self.read_reg8(vx);
             let r: u8 = rand::random();
             self.write_reg8(vx, r & x);
+            true
         } else if i & 0xF000 == 0xD000 {
             // XOR sprite of n bytes at x and y and set VF to 1 if pixel erased
             let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
@@ -317,17 +339,19 @@ impl Chip8 {
                 draw_y = draw_y.overflowing_add(1).0;
             }
             self.write_reg8(Reg8::VF, erased);
+            true
         } else if i & 0xF0FF == 0xE09E {
             // Skip if Vx is pressed
             unimplemented!();
         } else if i & 0xF0FF == 0xE0A1 {
             // Skip if Vx is not pressed
-            unimplemented!()
+            unimplemented!();
         } else if i & 0xF0FF == 0xF007 {
             // Vx = DT
             let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
             let dt = self.read_reg8(Reg8::DT);
             self.write_reg8(vx, dt);
+            true
         } else if i & 0xF0FF == 0xF00A {
             // Wait for key press and store key value in Vx
             unimplemented!()
@@ -335,16 +359,19 @@ impl Chip8 {
             // DT = Vx
             let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
             self.write_reg8(Reg8::DT, self.read_reg8(vx));
+            true
         } else if i & 0xF0FF == 0xF018 {
             // ST = Vx
             let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
             self.write_reg8(Reg8::ST, self.read_reg8(vx));
+            true
         } else if i & 0xF0FF == 0xF01E {
             // I += Vx
             let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
             let x = self.read_reg8(vx);
             let value = self.read_reg16(Reg16::I);
             self.write_reg16(Reg16::I, value.overflowing_add(x as u16).0);
+            true
         } else if i & 0xF0FF == 0xF029 {
             unimplemented!()
         } else if i & 0xF0FF == 0xF033 {
@@ -355,16 +382,19 @@ impl Chip8 {
             unimplemented!()
         } else {
             panic!("Chip-8: Invalid instruction {:X}", i);
+        };
+        if advance_pc {
+            let pc = self.read_reg16(Reg16::PC);
+            self.write_reg16(Reg16::PC, pc + ADDR_SIZE);
         }
     }
 
     /// Call at 60 Hz
     pub fn update(&mut self) {
         // Execute instruction at program counter
-        let instruction = self.read16(self.read_reg16(Reg16::PC) as usize);
+        let pc = self.read_reg16(Reg16::PC);
+        let instruction = self.read16(pc as usize);
         self.execute_instruction(instruction);
-        // Advance program counter
-        self.write_reg16(Reg16::PC, self.read_reg16(Reg16::PC) + ADDR_SIZE);
 
         // Delay Timer
         let dt = self.read_reg8(Reg8::DT);
