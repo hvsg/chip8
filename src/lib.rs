@@ -1,3 +1,5 @@
+use rand;
+
 /// Big Endian
 /// Each address refers to a single byte
 /// last byte is at index 4095
@@ -12,9 +14,16 @@ pub const STACK_ADDR: usize = Reg8::ST as usize;
 pub const STACK_SIZE: usize = 16 * 2;
 /// Stack address should be less than this address
 pub const STACK_LAST_ADDR: usize = STACK_ADDR + STACK_SIZE - 2;
+/// Screen width in pixels
+pub const SCREEN_WIDTH: usize = 64;
+/// Screen height in pixels
+pub const SCREEN_HEIGHT: usize = 32;
+/// Number of Pixels
+pub const NUM_PIXELS: usize = SCREEN_WIDTH * SCREEN_HEIGHT;
 
 /// Contains 16-bit register addresses
 #[repr(usize)]
+#[derive(Clone, Copy)]
 pub enum Reg16 {
     PC = 0x0,
     I = 0x02,
@@ -22,6 +31,7 @@ pub enum Reg16 {
 
 /// Contains 8-bit register addresses
 #[repr(usize)]
+#[derive(Clone, Copy)]
 pub enum Reg8 {
     SP = SP_ADDR,
     V0,
@@ -55,13 +65,31 @@ fn to_general_reg8(x: usize) -> Reg8 {
 pub struct Chip8 {
     // RAM
     memory: [u8; MEMORY_SIZE],
+    // Display memory, each byte corresponds to a pixel
+    display: [u8; NUM_PIXELS],
 }
 
 impl Chip8 {
     pub fn new() -> Self {
         Self {
             memory: [0; MEMORY_SIZE],
+            display: [0; NUM_PIXELS],
         }
+    }
+
+    fn clear_screen(&mut self) {
+        self.display = [0; NUM_PIXELS];
+    }
+
+    /// XOR byte for given (x, y) coordinates
+    /// where (0, 0) is top left and (width-1, height-1) is bottom right
+    /// Returns 1 if bit was erased, otherwise 0
+    fn draw(&mut self, x: usize, y: usize, value: u8) -> u8 {
+        // compute address
+        let index = y * SCREEN_WIDTH + x;
+        let pixel = self.display[index];
+        self.display[index] ^= value;
+        (pixel == value) as u8
     }
 
     /// Read 8-bit register
@@ -110,8 +138,9 @@ impl Chip8 {
 
     /// Execute instruction i
     fn execute_instruction(&mut self, i: u16) {
-        if i == 0x00E0 { // CLS
-             // TODO: Clear screen
+        if i == 0x00E0 {
+            // CLS
+            self.clear_screen();
         } else if i == 0x00EE {
             // RET
             let sp = self.read_reg8(Reg8::SP);
@@ -141,7 +170,7 @@ impl Chip8 {
             let vx = to_general_reg8(x as usize);
             let lower: u8 = (0x00FF & i) as u8;
             // Skip istruction
-            if self.read_reg8(Vx) == lower {
+            if self.read_reg8(vx) == lower {
                 let pc = self.read_reg16(Reg16::PC);
                 self.write_reg16(Reg16::PC, pc + 2);
             }
@@ -158,7 +187,7 @@ impl Chip8 {
         } else if i & 0xF000 == 0x5000 {
             // Skip if Vx == Vy
             let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
-            let vy = to_general_reg8(((i & 0x00F0) >> 8) as usize);
+            let vy = to_general_reg8(((i & 0x00F0) >> 4) as usize);
             if self.read_reg8(vx) == self.read_reg8(vy) {
                 let pc = self.read_reg16(Reg16::PC);
                 self.write_reg16(Reg16::PC, pc + 2);
@@ -177,37 +206,37 @@ impl Chip8 {
         } else if i & 0xF000 == 0x8000 {
             // Vx = Vy
             let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
-            let vy = to_general_reg8(((i & 0x00F0) >> 8) as usize);
+            let vy = to_general_reg8(((i & 0x00F0) >> 4) as usize);
             self.write_reg8(vx, self.read_reg8(vy));
         } else if i & 0xF00F == 0x8001 {
             // Vx |= Vy
             let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
-            let vy = to_general_reg8(((i & 0x00F0) >> 8) as usize);
+            let vy = to_general_reg8(((i & 0x00F0) >> 4) as usize);
             let value = self.read_reg8(vx) | self.read_reg8(vy);
             self.write_reg8(vx, value);
         } else if i & 0xF00F == 0x8002 {
             // Vx &= Vy
             let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
-            let vy = to_general_reg8(((i & 0x00F0) >> 8) as usize);
+            let vy = to_general_reg8(((i & 0x00F0) >> 4) as usize);
             let value = self.read_reg8(vx) & self.read_reg8(vy);
             self.write_reg8(vx, value);
         } else if i & 0xF00F == 0x8003 {
             // Vx ^= Vy
             let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
-            let vy = to_general_reg8(((i & 0x00F0) >> 8) as usize);
+            let vy = to_general_reg8(((i & 0x00F0) >> 4) as usize);
             let value = self.read_reg8(vx) ^ self.read_reg8(vy);
             self.write_reg8(vx, value);
         } else if i & 0xF00F == 0x8004 {
             // Vx  += Vy and VF = carry
             let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
-            let vy = to_general_reg8(((i & 0x00F0) >> 8) as usize);
+            let vy = to_general_reg8(((i & 0x00F0) >> 4) as usize);
             let (value, carry) = self.read_reg8(vx).overflowing_add(self.read_reg8(vy));
             self.write_reg8(vx, value);
             self.write_reg8(Reg8::VF, carry as u8);
         } else if i & 0xF00F == 0x8005 {
             // VF = Vx > Vy (!borrow) and Vx -= Vy
             let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
-            let vy = to_general_reg8(((i & 0x00F0) >> 8) as usize);
+            let vy = to_general_reg8(((i & 0x00F0) >> 4) as usize);
             let x = self.read_reg8(vx);
             let y = self.read_reg8(vy);
             let (value, borrow) = self.read_reg8(vx).overflowing_sub(self.read_reg8(vy));
@@ -217,8 +246,61 @@ impl Chip8 {
             // VF = LSB(Vx) and Vx /= 2
             let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
             let x = self.read_reg8(vx);
-            self.write_reg8(vx, x >> 1);
             self.write_reg8(Reg8::VF, x & 0x1);
+            self.write_reg8(vx, x >> 1);
+        } else if i & 0xF00F == 0x8007 {
+            // VF = Vy > Vx, Vx = Vy - Vx
+            let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
+            let vy = to_general_reg8(((i & 0x00F0) >> 4) as usize);
+            let x = self.read_reg8(vx);
+            let y = self.read_reg8(vy);
+            let (value, underflow) = y.overflowing_sub(x);
+            self.write_reg8(vx, value);
+            self.write_reg8(Reg8::VF, !underflow as u8);
+        } else if i & 0xF00F == 0x800E {
+            // Vx = Vx << 1 and VF = overflow
+            let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
+            let x = self.read_reg8(vx);
+            self.write_reg8(Reg8::VF, x & (0x1 << 7));
+            self.write_reg8(vx, x << 1);
+        } else if i & 0xF000 == 0xA000 {
+            // I = value
+            self.write_reg16(Reg16::I, i & 0x0FFF);
+        } else if i & 0xF000 == 0xB000 {
+            // JP V0 + value
+            let v0 = self.read_reg8(Reg8::V0);
+            self.write_reg16(Reg16::PC, (i & 0x0FFF) + v0 as u16);
+        } else if i & 0xF000 == 0xC000 {
+            //  Vx = random & lower
+            let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
+            let x = self.read_reg8(vx);
+            let r: u8 = rand::random();
+            self.write_reg8(vx, r & x);
+        } else if i & 0xF000 == 0xD000 {
+            // XOR sprite of n bytes at x and y and set VF to 1 if pixel erased
+            let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
+            let vy = to_general_reg8(((i & 0x00F0) >> 4) as usize);
+            let n = (i & 0x000F) as u8;
+
+            let x = self.read_reg8(vx);
+            let mut draw_y = self.read_reg8(vy);
+
+            let sprite = self.read_reg16(Reg16::I);
+            let mut erased: u8 = 0;
+
+            for j in 0..n {
+                // load byte
+                let mut byte = self.read8(sprite.saturating_add(j as u16) as usize);
+                // assuming that vx,vy corresponds to first byte (top-left corner) of sprite
+                for k in 0..8 {
+                    // TODO: draw sprite and update erased
+                    let draw_x = x.overflowing_add(k).0;
+                    erased |= self.draw(draw_x as usize, draw_y as usize, byte & (0x1 << 7));
+                    byte <<= 1;
+                }
+                draw_y = draw_y.overflowing_add(1).0;
+            }
+            self.write_reg8(Reg8::VF, erased);
         }
     }
 
