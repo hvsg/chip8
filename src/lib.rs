@@ -9,7 +9,7 @@ pub const MEMORY_SIZE: usize = MAX_ADDR + 1;
 /// Stack Pointer
 pub const SP_ADDR: usize = Reg16::I as usize + 2;
 /// Base address of the stack
-pub const STACK_ADDR: usize = Reg8::ST as usize;
+pub const STACK_ADDR: usize = Reg8::ST as usize + 1;
 /// Number of bytes used for the stack
 pub const STACK_SIZE: usize = 16 * 2;
 /// Stack address should be less than this address
@@ -22,6 +22,33 @@ pub const SCREEN_HEIGHT: usize = 32;
 pub const NUM_PIXELS: usize = SCREEN_WIDTH * SCREEN_HEIGHT;
 /// Size in bytes of program counter
 pub const ADDR_SIZE: u16 = 2;
+/// Base address of built-in sprites
+pub const SPRITE_BASE_ADDR: usize = STACK_ADDR + STACK_SIZE;
+/// Size of built-in alpha-numeric sprites in bytes.
+/// Built-in sprites include 0-9, A-F
+pub const SPRITE_SIZE: usize = 5;
+/// Number of built-in sprites
+pub const NUM_SPRITES: usize = 16;
+
+// From Cowgod's Chip-8 Technical Reference v1.0 by Thomas P. Greene
+pub const HEX_SPRITES: [u8; NUM_SPRITES * SPRITE_SIZE] = [
+    0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
+    0x20, 0x60, 0x20, 0x20, 0x70, // 1
+    0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
+    0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
+    0x90, 0x90, 0xF0, 0x10, 0x10, // 4
+    0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
+    0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
+    0xF0, 0x10, 0x20, 0x40, 0x40, // 7
+    0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
+    0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
+    0xF0, 0x90, 0xF0, 0x90, 0x90, // A
+    0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
+    0xF0, 0x80, 0x80, 0x80, 0xF0, // C
+    0xE0, 0x90, 0x90, 0x90, 0xE0, // D
+    0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
+    0xF0, 0x80, 0xF0, 0x80, 0x80, // F
+];
 
 /// Contains 16-bit register addresses
 #[repr(usize)]
@@ -73,6 +100,7 @@ pub struct Chip8 {
 }
 
 impl Chip8 {
+    /// Creates and initializes new instance of Chip-8
     pub fn new() -> Self {
         let mut s = Self {
             memory: [0; MEMORY_SIZE],
@@ -81,10 +109,26 @@ impl Chip8 {
         // Initialize registers
         s.write_reg16(Reg16::PC, 0x0600);
         s.write_reg8(Reg8::SP, (STACK_ADDR - ADDR_SIZE as usize) as u8);
+        // Load sprites
+        s.load_sprites();
         s
     }
 
-    fn clear_screen(&mut self) {
+    /// Get memory address of hex digit (0-9 or A-F)
+    fn get_digit_location(digit: u8) -> u16 {
+        assert!(digit <= 0xF);
+        SPRITE_BASE_ADDR as u16 + (digit as u16) * SPRITE_SIZE as u16
+    }
+
+    /// Load built-in sprites into memory
+    fn load_sprites(&mut self) {
+        let dest =
+            &mut self.memory[SPRITE_BASE_ADDR..(SPRITE_BASE_ADDR + SPRITE_SIZE * NUM_SPRITES)];
+        dest.copy_from_slice(&HEX_SPRITES);
+    }
+
+    /// Turns off all pixels
+    pub fn clear_screen(&mut self) {
         self.display = [0; NUM_PIXELS];
     }
 
@@ -374,7 +418,12 @@ impl Chip8 {
             self.write_reg16(Reg16::I, value.overflowing_add(x as u16).0);
             true
         } else if i & 0xF0FF == 0xF029 {
-            unimplemented!()
+            // I = sprite for Vx
+            let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
+            let digit = self.read_reg8(vx);
+            let location = Self::get_digit_location(digit);
+            self.write_reg16(Reg16::I, location);
+            true
         } else if i & 0xF0FF == 0xF033 {
             // Store BCD representation of Vx starting at I
             let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
