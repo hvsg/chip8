@@ -58,6 +58,7 @@ pub enum Reg8 {
 
 /// Convert unsize to general purpose register (V0-VF)
 fn to_general_reg8(x: usize) -> Reg8 {
+    let x = x + Reg8::V0 as usize;
     assert!(x >= Reg8::V0 as usize);
     assert!(x <= Reg8::VF as usize);
     unsafe { std::mem::transmute(x) }
@@ -377,9 +378,29 @@ impl Chip8 {
         } else if i & 0xF0FF == 0xF033 {
             unimplemented!()
         } else if i & 0xF0FF == 0xF055 {
-            unimplemented!()
+            // write v0-vx into memory starting at I
+            let start = self.read_reg16(Reg16::I);
+            let x = (i & 0x0F00) >> 8;
+            for j in 0..=x {
+                // Read value
+                let register = to_general_reg8(j as usize);
+                let value = self.read_reg8(register);
+                // store
+                self.write8((start + j) as usize, value);
+            }
+            true
         } else if i & 0xF0FF == 0xF065 {
-            unimplemented!()
+            // read memory from I into v0-vx
+            let start = self.read_reg16(Reg16::I);
+            let x = (i & 0x0F00) >> 8;
+            for j in 0..=x {
+                // Read value
+                let value = self.read8((start + j) as usize);
+                // store
+                let register = to_general_reg8(j as usize);
+                self.write_reg8(register, value);
+            }
+            true
         } else {
             panic!("Chip-8: Invalid instruction {:X}", i);
         };
