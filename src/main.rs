@@ -7,8 +7,8 @@ fn blit_ru8_to_rgbau8(src: &[u8], dst: &mut [u8]) {
     assert_eq!(src.len() * 4, dst.len());
     src.iter().enumerate().for_each(|(i, pixel)| {
         dst[4 * i] = *pixel;
-        dst[4 * i + 1] = *pixel * 0;
-        dst[4 * i + 2] = *pixel * 0;
+        dst[4 * i + 1] = *pixel;
+        dst[4 * i + 2] = *pixel;
         dst[4 * i + 3] = u8::MAX;
     });
     // dst.iter_mut().for_each(|pixel| {
@@ -16,9 +16,17 @@ fn blit_ru8_to_rgbau8(src: &[u8], dst: &mut [u8]) {
     // });
 }
 fn main() {
+    println!("Loading rom...");
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() != 2 {
+        println!("Please provide a single argument as a path to the rom.");
+        return;
+    }
+    let rom = std::fs::read(&args[1]).expect("Failed to read rom at path");
+
     println!("Initializing Chip-8!");
     let mut chip8 = Chip8::new();
-
+    chip8.load_rom(rom.as_slice());
     let event_loop = winit::event_loop::EventLoop::new();
     let physical_size =
         winit::dpi::PhysicalSize::new(chip8::SCREEN_WIDTH as u32, chip8::SCREEN_HEIGHT as u32);
@@ -100,6 +108,7 @@ fn main() {
         },
         winit::event::Event::MainEventsCleared => {
             window.request_redraw();
+            chip8.update();
             blit_ru8_to_rgbau8(chip8.get_screen_texture(), pixels.get_frame());
         }
         winit::event::Event::RedrawRequested(window_id) => {

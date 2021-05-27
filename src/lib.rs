@@ -29,6 +29,8 @@ pub const SPRITE_BASE_ADDR: usize = STACK_ADDR + STACK_SIZE;
 pub const SPRITE_SIZE: usize = 5;
 /// Number of built-in sprites
 pub const NUM_SPRITES: usize = 16;
+/// Start address of program
+pub const PROGRAM_START_ADDR: usize = 0x200;
 
 // From Cowgod's Chip-8 Technical Reference v1.0 by Thomas P. Greene
 pub const HEX_SPRITES: [u8; NUM_SPRITES * SPRITE_SIZE] = [
@@ -108,7 +110,7 @@ impl Chip8 {
             display: [0; NUM_PIXELS],
         };
         // Initialize registers
-        s.write_reg16(Reg16::PC, 0x0600);
+        s.write_reg16(Reg16::PC, PROGRAM_START_ADDR as u16);
         s.write_reg8(Reg8::SP, (STACK_ADDR - ADDR_SIZE as usize) as u8);
         // Load sprites
         s.load_sprites();
@@ -126,6 +128,12 @@ impl Chip8 {
         let kb = self.read_reg16(Reg16::KB);
         let value = if pressed { kb | mask } else { kb & !mask };
         self.write_reg16(Reg16::KB, value);
+    }
+
+    /// Loads the ROM into memory
+    pub fn load_rom(&mut self, rom: &[u8]) {
+        let dst = &mut self.memory[PROGRAM_START_ADDR..(PROGRAM_START_ADDR + rom.len())];
+        dst.copy_from_slice(rom);
     }
 
     /// Get memory address of hex digit (0-9 or A-F)
@@ -401,10 +409,30 @@ impl Chip8 {
             true
         } else if i & 0xF0FF == 0xE09E {
             // Skip if Vx is pressed
-            unimplemented!();
+            let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
+            let value = self.read_reg8(vx);
+            let kb = self.read_reg16(Reg16::KB);
+
+            if kb & (1u16 << value) == (1u16 << value) {
+                let pc = self.read_reg16(Reg16::PC);
+                self.write_reg16(Reg16::PC, pc + 2 * ADDR_SIZE);
+                false
+            } else {
+                true
+            }
         } else if i & 0xF0FF == 0xE0A1 {
             // Skip if Vx is not pressed
-            unimplemented!();
+            let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
+            let value = self.read_reg8(vx);
+            let kb = self.read_reg16(Reg16::KB);
+
+            if kb & (1u16 << value) != (1u16 << value) {
+                let pc = self.read_reg16(Reg16::PC);
+                self.write_reg16(Reg16::PC, pc + 2 * ADDR_SIZE);
+                false
+            } else {
+                true
+            }
         } else if i & 0xF0FF == 0xF007 {
             // Vx = DT
             let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
