@@ -222,7 +222,9 @@ impl Chip8 {
             if sp < STACK_ADDR as u8 {
                 panic!("Chip-8: Stack Underflow");
             }
-            self.write_reg16(Reg16::PC, sp as u16);
+            // get return address stored at stack pointer
+            let addr = self.read16(sp as usize);
+            self.write_reg16(Reg16::PC, addr);
             self.write_reg8(Reg8::SP, sp - ADDR_SIZE as u8);
             false
         } else if i & 0xF000 == 0x1000 {
@@ -530,5 +532,72 @@ impl Chip8 {
             self.write_reg8(Reg8::ST, st - 1);
             // TODO: Play tone
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Chip8, Reg8, Reg16, NUM_PIXELS, ADDR_SIZE, STACK_ADDR};
+    #[test]
+    fn initialization() {
+        let c = Chip8::new();
+        assert_eq!(c.read_reg16(Reg16::PC), 0x200);
+        assert_eq!(c.read_reg16(Reg16::I), 0x0);
+        assert_eq!(c.read_reg16(Reg16::KB), 0x0);
+    }
+
+    #[test]
+    fn read_write_registers() {
+        let mut c = Chip8::new();
+        c.write_reg8(Reg8::V0, u8::MAX);
+        assert_eq!(c.read_reg8(Reg8::V0), u8::MAX);
+
+        c.write_reg16(Reg16::I, 0xFA);
+        assert_eq!(c.read_reg16(Reg16::I), 0xFA);
+    }
+
+    #[test]
+    fn cls() {
+        let mut c = Chip8::new();
+        c.display = [u8::MAX; NUM_PIXELS];
+        c.load_rom(&[
+            0x00, 0xE0
+        ]);
+        c.update();
+        assert_eq!(c.display, [0u8; NUM_PIXELS]);
+        assert_eq!(c.read_reg16(Reg16::PC), 0x200 + ADDR_SIZE);
+    }
+
+    #[test]
+    fn jp() {
+        let mut c = Chip8::new();
+        c.load_rom(&[
+            0x1F, 0xF2
+        ]);
+        c.update();
+        assert_eq!(c.read_reg16(Reg16::PC), 0xFF2);
+    }
+
+    #[test]
+    fn call_ret() {
+        let mut c = Chip8::new();
+        c.load_rom(&[
+            0x22, 0x04,
+            0x00, 0x00,
+            0x00, 0xEE,
+        ]);
+        
+        // CALL: Test stack pointer and return address
+        c.update();
+        assert_eq!(c.read_reg16(Reg16::PC), (0x200 + 2*ADDR_SIZE));
+        let sp = c.read_reg8(Reg8::SP);
+        assert_eq!(sp, STACK_ADDR as u8);
+        let addr = c.read16(sp as usize);
+        assert_eq!(addr, 0x200);
+
+        // RET: Test stack pointer and restored address
+        c.update();
+        assert_eq!(c.read_reg16(Reg16::PC), 0x200);
+        assert_eq!(c.read_reg8(Reg8::SP), (STACK_ADDR - 2) as u8);
     }
 }
