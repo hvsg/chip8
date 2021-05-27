@@ -256,8 +256,9 @@ impl Chip8 {
             if self.read_reg8(vx) == lower {
                 let pc = self.read_reg16(Reg16::PC);
                 self.write_reg16(Reg16::PC, pc + 2 * ADDR_SIZE);
+                false
             }
-            false
+            else {true}
         } else if i & 0xF000 == 0x4000 {
             // Skip if register Vx neq to lower byte
             let x = (i & 0x0F00) >> 8;
@@ -267,8 +268,8 @@ impl Chip8 {
             if self.read_reg8(vx) != lower {
                 let pc = self.read_reg16(Reg16::PC);
                 self.write_reg16(Reg16::PC, pc + 2 * ADDR_SIZE);
-            }
-            false
+                false
+            } else {true}
         } else if i & 0xF000 == 0x5000 {
             // Skip if Vx == Vy
             let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
@@ -599,5 +600,37 @@ mod tests {
         c.update();
         assert_eq!(c.read_reg16(Reg16::PC), 0x200);
         assert_eq!(c.read_reg8(Reg8::SP), (STACK_ADDR - 2) as u8);
+    }
+    #[test]
+    fn i3xnn_skip_eq() {
+        let mut c = Chip8::new();
+        c.write_reg8(Reg8::VA, 0xAA);
+        c.load_rom(&[
+            0x3A, 0xAB,
+            0x3A, 0xAA,
+        ]);
+
+        // Test skip
+        c.update();
+        assert_eq!(c.read_reg16(Reg16::PC), (0x200 + ADDR_SIZE));
+        c.update();
+        assert_eq!(c.read_reg16(Reg16::PC), (0x200 + 3*ADDR_SIZE));
+
+    }
+
+    #[test]
+    fn i4xnn_skip_neq() {
+        let mut c = Chip8::new();
+        c.write_reg8(Reg8::VA, 0xAA);
+        c.load_rom(&[
+            0x4A, 0xAA,
+            0x4A, 0xAB,
+        ]);
+
+        // Test skip
+        c.update();
+        assert_eq!(c.read_reg16(Reg16::PC), (0x200 + ADDR_SIZE));
+        c.update();
+        assert_eq!(c.read_reg16(Reg16::PC), (0x200 + 3*ADDR_SIZE));
     }
 }
