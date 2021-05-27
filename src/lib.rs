@@ -281,7 +281,9 @@ impl Chip8 {
                 let pc = self.read_reg16(Reg16::PC);
                 self.write_reg16(Reg16::PC, pc + 2 * ADDR_SIZE);
                 false
-            } else {true}
+            } else {
+                true
+            }
         } else if i & 0xF000 == 0x6000 {
             // Put lower byte value into Vx
             let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
@@ -295,7 +297,7 @@ impl Chip8 {
             let value = self.read_reg8(vx).overflowing_add(lower).0;
             self.write_reg8(vx, value);
             true
-        } else if i & 0xF000 == 0x8000 {
+        } else if i & 0xF00F == 0x8000 {
             // Vx = Vy
             let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
             let vy = to_general_reg8(((i & 0x00F0) >> 4) as usize);
@@ -334,16 +336,18 @@ impl Chip8 {
             // VF = Vx > Vy (!borrow) and Vx -= Vy
             let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
             let vy = to_general_reg8(((i & 0x00F0) >> 4) as usize);
-
-            let (value, borrow) = self.read_reg8(vx).overflowing_sub(self.read_reg8(vy));
+            let x = self.read_reg8(vx);
+            let y = self.read_reg8(vy);
+            let (value, _) = x.overflowing_sub(y);
             self.write_reg8(vx, value);
-            self.write_reg8(Reg8::VF, !borrow as u8);
+            // self.write_reg8(Reg8::VF, !borrow as u8);
+            self.write_reg8(Reg8::VF, (x > y) as u8);
             true
         } else if i & 0xF00F == 0x8006 {
             // VF = LSB(Vx) and Vx /= 2
             let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
             let x = self.read_reg8(vx);
-            self.write_reg8(Reg8::VF, x & 0x1);
+            self.write_reg8(Reg8::VF, x & 0x1u8);
             self.write_reg8(vx, x >> 1);
             true
         } else if i & 0xF00F == 0x8007 {
@@ -352,15 +356,16 @@ impl Chip8 {
             let vy = to_general_reg8(((i & 0x00F0) >> 4) as usize);
             let x = self.read_reg8(vx);
             let y = self.read_reg8(vy);
-            let (value, underflow) = y.overflowing_sub(x);
+            let (value, _) = y.overflowing_sub(x);
             self.write_reg8(vx, value);
-            self.write_reg8(Reg8::VF, !underflow as u8);
+            // self.write_reg8(Reg8::VF, !underflow as u8);
+            self.write_reg8(Reg8::VF, (y > x) as u8);
             true
         } else if i & 0xF00F == 0x800E {
             // Vx = Vx << 1 and VF = overflow
             let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
             let x = self.read_reg8(vx);
-            self.write_reg8(Reg8::VF, x & (0x1 << 7));
+            self.write_reg8(Reg8::VF, (x >> 7) & 0x1u8);
             self.write_reg8(vx, x << 1);
             true
         } else if i & 0xF00F == 0x9000 {
@@ -370,8 +375,10 @@ impl Chip8 {
             if self.read_reg8(vx) != self.read_reg8(vy) {
                 let pc = self.read_reg16(Reg16::PC);
                 self.write_reg16(Reg16::PC, pc + 2 * ADDR_SIZE);
+                false
+            } else {
+                true
             }
-            false
         } else if i & 0xF000 == 0xA000 {
             // I = value
             self.write_reg16(Reg16::I, i & 0x0FFF);
@@ -629,12 +636,164 @@ mod tests {
         c.write_reg8(Reg8::VB, 0xAB);
         c.write_reg8(Reg8::VC, 0xAA);
 
-        c.load_rom(&[
-            0x5A, 0xB0, 
-            0x5A, 0xC0
-        ]);
+        c.load_rom(&[0x5A, 0xB0, 0x5A, 0xC0]);
 
         // Test skip
+        c.update();
+        assert_eq!(c.read_reg16(Reg16::PC), (0x200 + ADDR_SIZE));
+        c.update();
+        assert_eq!(c.read_reg16(Reg16::PC), (0x200 + 3 * ADDR_SIZE));
+    }
+
+    #[test]
+    fn i6xnn_load() {
+        let mut c = Chip8::new();
+
+        c.load_rom(&[0x6A, 0xBC]);
+        // Test register for loaded value
+        c.update();
+        assert_eq!(c.read_reg16(Reg16::PC), (0x200 + ADDR_SIZE));
+        assert_eq!(c.read_reg8(Reg8::VA), 0xBC);
+    }
+
+    #[test]
+    fn i7xnn_add() {
+        let mut c = Chip8::new();
+        c.write_reg8(Reg8::VA, 0xFF);
+        c.load_rom(&[0x7A, 0x01]);
+        // Test registers
+        c.update();
+        assert_eq!(c.read_reg16(Reg16::PC), (0x200 + ADDR_SIZE));
+        assert_eq!(c.read_reg8(Reg8::VA), 0x00);
+    }
+
+    #[test]
+    fn i8xy0_load() {
+        let mut c = Chip8::new();
+        c.write_reg8(Reg8::VB, 0xFF);
+        c.load_rom(&[0x8A, 0xB0]);
+        // Test registers
+        c.update();
+        assert_eq!(c.read_reg16(Reg16::PC), (0x200 + ADDR_SIZE));
+        assert_eq!(c.read_reg8(Reg8::VA), 0xFF);
+    }
+
+    #[test]
+    fn i8xy1_or() {
+        let mut c = Chip8::new();
+        c.write_reg8(Reg8::VA, 0b10101010);
+        c.write_reg8(Reg8::VB, 0b01010101);
+        c.load_rom(&[0x8A, 0xB1]);
+        // Test registers
+        c.update();
+        assert_eq!(c.read_reg16(Reg16::PC), (0x200 + ADDR_SIZE));
+        assert_eq!(c.read_reg8(Reg8::VA), 0xFF);
+    }
+
+    #[test]
+    fn i8xy2_and() {
+        let mut c = Chip8::new();
+        c.write_reg8(Reg8::VA, 0b10101010);
+        c.write_reg8(Reg8::VB, 0b01010111);
+        c.load_rom(&[0x8A, 0xB2]);
+        // Test registers
+        c.update();
+        assert_eq!(c.read_reg16(Reg16::PC), (0x200 + ADDR_SIZE));
+        assert_eq!(c.read_reg8(Reg8::VA), 0x2);
+    }
+
+    #[test]
+    fn i8xy3_xor() {
+        let mut c = Chip8::new();
+        c.write_reg8(Reg8::VA, 0b10101010);
+        c.write_reg8(Reg8::VB, 0b01010111);
+        c.load_rom(&[0x8A, 0xB3]);
+        // Test registers
+        c.update();
+        assert_eq!(c.read_reg16(Reg16::PC), (0x200 + ADDR_SIZE));
+        assert_eq!(c.read_reg8(Reg8::VA), 0b11111101);
+    }
+
+    #[test]
+    fn i8xy4_add_carry() {
+        let mut c = Chip8::new();
+        c.write_reg8(Reg8::VA, 0xFF);
+        c.write_reg8(Reg8::VB, 0x01);
+        c.load_rom(&[0x8A, 0xB4]);
+        // Test registers
+        c.update();
+        assert_eq!(c.read_reg16(Reg16::PC), (0x200 + ADDR_SIZE));
+        assert_eq!(c.read_reg8(Reg8::VA), 0);
+        assert_eq!(c.read_reg8(Reg8::VF), 1);
+    }
+
+    #[test]
+    fn i8xy5_sub() {
+        let mut c = Chip8::new();
+        c.write_reg8(Reg8::VA, 0xFF);
+        c.write_reg8(Reg8::VB, 0x01);
+        c.load_rom(&[0x8A, 0xB5, 0x8B, 0xA5]);
+        // Test registers
+        c.update();
+        assert_eq!(c.read_reg16(Reg16::PC), (0x200 + ADDR_SIZE));
+        assert_eq!(c.read_reg8(Reg8::VA), 0xFE);
+        assert_eq!(c.read_reg8(Reg8::VF), 1);
+        c.update();
+        assert_eq!(c.read_reg16(Reg16::PC), (0x200 + 2 * ADDR_SIZE));
+        assert_eq!(c.read_reg8(Reg8::VB), 1u8.overflowing_sub(0xFE).0);
+        assert_eq!(c.read_reg8(Reg8::VF), 0);
+    }
+
+    #[test]
+    fn i8xy6_shr() {
+        let mut c = Chip8::new();
+        c.write_reg8(Reg8::VA, 0b10101001);
+        c.load_rom(&[0x8A, 0xB6, 0x8A, 0xB6]);
+        // Test registers
+        c.update();
+        assert_eq!(c.read_reg16(Reg16::PC), (0x200 + ADDR_SIZE));
+        assert_eq!(c.read_reg8(Reg8::VA), 0b01010100);
+        assert_eq!(c.read_reg8(Reg8::VF), 1);
+        c.update();
+        assert_eq!(c.read_reg8(Reg8::VA), 0b00101010);
+        assert_eq!(c.read_reg8(Reg8::VF), 0);
+    }
+
+    #[test]
+    fn i8xy7_subn() {
+        let mut c = Chip8::new();
+        c.write_reg8(Reg8::VA, 0x01);
+        c.write_reg8(Reg8::VB, 0xFF);
+
+        c.load_rom(&[0x8A, 0xB7]);
+        // Test registers
+        c.update();
+        assert_eq!(c.read_reg16(Reg16::PC), (0x200 + ADDR_SIZE));
+        assert_eq!(c.read_reg8(Reg8::VA), 0xFE);
+        assert_eq!(c.read_reg8(Reg8::VF), 1);
+    }
+
+    #[test]
+    fn i8xye_shl() {
+        let mut c = Chip8::new();
+        c.write_reg8(Reg8::VA, 0b10101010);
+        c.load_rom(&[0x8A, 0xBE]);
+        // Test registers
+        c.update();
+        assert_eq!(c.read_reg16(Reg16::PC), (0x200 + ADDR_SIZE));
+        assert_eq!(c.read_reg8(Reg8::VA), 0b01010100);
+        assert_eq!(c.read_reg8(Reg8::VF), 1);
+    }
+
+    #[test]
+    fn i9xy0_skip_neq() {
+        let mut c = Chip8::new();
+        c.write_reg8(Reg8::VA, 0xAA);
+        c.write_reg8(Reg8::VB, 0xAA);
+        c.write_reg8(Reg8::VC, 0xAB);
+
+        c.load_rom(&[0x9A, 0xB0, 0x9A, 0xC0]);
+        // Test registers
         c.update();
         assert_eq!(c.read_reg16(Reg16::PC), (0x200 + ADDR_SIZE));
         c.update();

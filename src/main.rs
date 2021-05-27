@@ -39,11 +39,6 @@ fn main() {
     let logical_size = physical_size.to_logical::<f64>(scale_factor);
     window.set_inner_size(logical_size);
 
-    println!(
-        "Physical Size {:?}, Logical Size {:?},Scale Factor: {:?}",
-        physical_size, logical_size, scale_factor
-    );
-
     let texture = pixels::SurfaceTexture::new(
         logical_size.width.round() as u32,
         logical_size.height.round() as u32,
