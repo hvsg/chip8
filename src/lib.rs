@@ -459,7 +459,20 @@ impl Chip8 {
             true
         } else if i & 0xF0FF == 0xF00A {
             // Wait for key press and store key value in Vx
-            unimplemented!()
+            let mut kb = self.read_reg16(Reg16::KB);
+            let mut value = 0;
+            while kb > 0 {
+                kb >>= 1;
+                value += 1;
+            }
+            // If there was a key press
+            if value > 0 {
+                let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
+                self.write_reg8(vx, value - 1);
+                true
+            } else {
+                false
+            }
         } else if i & 0xF0FF == 0xF015 {
             // DT = Vx
             let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
