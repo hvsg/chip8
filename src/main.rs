@@ -56,8 +56,10 @@ fn main() {
     .expect("Failed to create pixel buffer");
 
     let mut time = std::time::Instant::now();
-    let mut accumulator = 0.0;
-    const DT: f64 = 1.0 / 60.0;
+    let mut logic_accum = 0.0;
+    let mut timer_accum = 0.0;
+    const LOGIC_DT: f64 = 1.0 / 600.0;
+    const TIMER_DT: f64 = 1.0 / 60.0;
     event_loop.run(move |event, target, control_flow| match event {
         winit::event::Event::WindowEvent { window_id, event } => match event {
             winit::event::WindowEvent::CloseRequested => {
@@ -105,14 +107,21 @@ fn main() {
         },
         winit::event::Event::MainEventsCleared => {
             let current = std::time::Instant::now();
-            accumulator += (current - time).as_secs_f64();
+            let delta = (current - time).as_secs_f64();
+            logic_accum += delta;
+            timer_accum += delta;
             time = current;
 
-            if accumulator > DT {
-                chip8.update();
+            if logic_accum >= LOGIC_DT {
+                chip8.update_logic();
                 blit_ru8_to_rgbau8(chip8.get_screen_texture(), pixels.get_frame());
                 window.request_redraw();
-                accumulator -= DT;
+                logic_accum -= LOGIC_DT;
+            }
+
+            if timer_accum >= TIMER_DT {
+                chip8.update_timers();
+                timer_accum -= TIMER_DT;
             }
         }
         winit::event::Event::RedrawRequested(window_id) => {

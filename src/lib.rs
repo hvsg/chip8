@@ -56,9 +56,14 @@ pub const HEX_SPRITES: [u8; NUM_SPRITES * SPRITE_SIZE] = [
 #[repr(usize)]
 #[derive(Clone, Copy)]
 pub enum Reg16 {
+    /// Program Counter
     PC = 0x0,
-    KB = 0x2,
-    I = 0x4,
+    /// Previous Keyboard Input
+    PKB = 0x2,
+    /// Current Keyboard Input
+    KB = 0x4,
+    /// Register I
+    I = 0x6,
 }
 
 /// Contains 8-bit register addresses
@@ -105,6 +110,8 @@ pub struct Chip8 {
 impl Chip8 {
     /// Creates and initializes new instance of Chip-8
     pub fn new() -> Self {
+        assert!(PROGRAM_START_ADDR > (SPRITE_BASE_ADDR + SPRITE_SIZE * NUM_SPRITES));
+
         let mut s = Self {
             memory: [0; MEMORY_SIZE],
             display: [0; NUM_PIXELS],
@@ -458,14 +465,17 @@ impl Chip8 {
             true
         } else if i & 0xF0FF == 0xF00A {
             // Wait for key press and store key value in Vx
+            // This should only trigger for new key presses
             let mut kb = self.read_reg16(Reg16::KB);
+            let pkb = self.read_reg16(Reg16::PKB);
             let mut value = 0;
             while kb > 0 {
                 kb >>= 1;
                 value += 1;
             }
-            // If there was a key press
-            if value > 0 {
+            // If there was a *new* key press
+            // let mask: u8 =
+            if value > 0 && ((0x1 << (value - 1)) & pkb) == 0 {
                 let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
                 self.write_reg8(vx, value - 1);
                 true
@@ -542,12 +552,17 @@ impl Chip8 {
     }
 
     /// Call at 60 Hz
-    pub fn update(&mut self) {
+    pub fn update_logic(&mut self) {
         // Execute instruction at program counter
         let pc = self.read_reg16(Reg16::PC);
         let instruction = self.read16(pc as usize);
         self.execute_instruction(instruction);
+        // Store previous keyboard input
+        let kb = self.read_reg16(Reg16::KB);
+        self.write_reg16(Reg16::PKB, kb);
+    }
 
+    pub fn update_timers(&mut self) {
         // Delay Timer
         let dt = self.read_reg8(Reg8::DT);
         if dt > 0 {
@@ -589,7 +604,7 @@ mod tests {
         let mut c = Chip8::new();
         c.display = [u8::MAX; NUM_PIXELS];
         c.load_rom(&[0x00, 0xE0]);
-        c.update();
+        c.update_logic();
         assert_eq!(c.display, [0u8; NUM_PIXELS]);
         assert_eq!(c.read_reg16(Reg16::PC), 0x200 + ADDR_SIZE);
     }
@@ -598,7 +613,7 @@ mod tests {
     fn jp() {
         let mut c = Chip8::new();
         c.load_rom(&[0x1F, 0xF2]);
-        c.update();
+        c.update_logic();
         assert_eq!(c.read_reg16(Reg16::PC), 0xFF2);
     }
 
@@ -608,12 +623,12 @@ mod tests {
         c.load_rom(&[0x22, 0x04, 0x00, 0x00, 0x00, 0xEE]);
 
         // CALL: Test stack pointer and return address
-        c.update();
+        c.update_logic();
         assert_eq!(c.read_reg16(Reg16::PC), (0x204));
         let sp = c.read_reg8(Reg8::SP);
         assert_eq!(sp, STACK_ADDR as u8);
         // RET: Test stack pointer and restored address
-        c.update();
+        c.update_logic();
         assert_eq!(c.read_reg16(Reg16::PC), 0x202);
         assert_eq!(c.read_reg8(Reg8::SP), (STACK_ADDR as u8 - 2));
     }
@@ -642,9 +657,9 @@ mod tests {
         c.load_rom(&[0x3A, 0xAB, 0x3A, 0xAA]);
 
         // Test skip
-        c.update();
+        c.update_logic();
         assert_eq!(c.read_reg16(Reg16::PC), (0x200 + ADDR_SIZE));
-        c.update();
+        c.update_logic();
         assert_eq!(c.read_reg16(Reg16::PC), (0x200 + 3 * ADDR_SIZE));
     }
 
@@ -655,9 +670,9 @@ mod tests {
         c.load_rom(&[0x4A, 0xAA, 0x4A, 0xAB]);
 
         // Test skip
-        c.update();
+        c.update_logic();
         assert_eq!(c.read_reg16(Reg16::PC), (0x200 + ADDR_SIZE));
-        c.update();
+        c.update_logic();
         assert_eq!(c.read_reg16(Reg16::PC), (0x200 + 3 * ADDR_SIZE));
     }
 
@@ -671,9 +686,9 @@ mod tests {
         c.load_rom(&[0x5A, 0xB0, 0x5A, 0xC0]);
 
         // Test skip
-        c.update();
+        c.update_logic();
         assert_eq!(c.read_reg16(Reg16::PC), (0x200 + ADDR_SIZE));
-        c.update();
+        c.update_logic();
         assert_eq!(c.read_reg16(Reg16::PC), (0x200 + 3 * ADDR_SIZE));
     }
 
@@ -683,7 +698,7 @@ mod tests {
 
         c.load_rom(&[0x6A, 0xBC]);
         // Test register for loaded value
-        c.update();
+        c.update_logic();
         assert_eq!(c.read_reg16(Reg16::PC), (0x200 + ADDR_SIZE));
         assert_eq!(c.read_reg8(Reg8::VA), 0xBC);
     }
@@ -694,7 +709,7 @@ mod tests {
         c.write_reg8(Reg8::VA, 0xFF);
         c.load_rom(&[0x7A, 0x01]);
         // Test registers
-        c.update();
+        c.update_logic();
         assert_eq!(c.read_reg16(Reg16::PC), (0x200 + ADDR_SIZE));
         assert_eq!(c.read_reg8(Reg8::VA), 0x00);
     }
@@ -705,7 +720,7 @@ mod tests {
         c.write_reg8(Reg8::VB, 0xFF);
         c.load_rom(&[0x8A, 0xB0]);
         // Test registers
-        c.update();
+        c.update_logic();
         assert_eq!(c.read_reg16(Reg16::PC), (0x200 + ADDR_SIZE));
         assert_eq!(c.read_reg8(Reg8::VA), 0xFF);
     }
@@ -717,7 +732,7 @@ mod tests {
         c.write_reg8(Reg8::VB, 0b01010101);
         c.load_rom(&[0x8A, 0xB1]);
         // Test registers
-        c.update();
+        c.update_logic();
         assert_eq!(c.read_reg16(Reg16::PC), (0x200 + ADDR_SIZE));
         assert_eq!(c.read_reg8(Reg8::VA), 0xFF);
     }
@@ -729,7 +744,7 @@ mod tests {
         c.write_reg8(Reg8::VB, 0b01010111);
         c.load_rom(&[0x8A, 0xB2]);
         // Test registers
-        c.update();
+        c.update_logic();
         assert_eq!(c.read_reg16(Reg16::PC), (0x200 + ADDR_SIZE));
         assert_eq!(c.read_reg8(Reg8::VA), 0x2);
     }
@@ -741,7 +756,7 @@ mod tests {
         c.write_reg8(Reg8::VB, 0b01010111);
         c.load_rom(&[0x8A, 0xB3]);
         // Test registers
-        c.update();
+        c.update_logic();
         assert_eq!(c.read_reg16(Reg16::PC), (0x200 + ADDR_SIZE));
         assert_eq!(c.read_reg8(Reg8::VA), 0b11111101);
     }
@@ -753,7 +768,7 @@ mod tests {
         c.write_reg8(Reg8::VB, 0x01);
         c.load_rom(&[0x8A, 0xB4]);
         // Test registers
-        c.update();
+        c.update_logic();
         assert_eq!(c.read_reg16(Reg16::PC), (0x200 + ADDR_SIZE));
         assert_eq!(c.read_reg8(Reg8::VA), 0);
         assert_eq!(c.read_reg8(Reg8::VF), 1);
@@ -769,17 +784,17 @@ mod tests {
 
         c.load_rom(&[0x8A, 0xB5, 0x8B, 0xA5, 0x8C, 0xD5]);
         // Test registers
-        c.update();
+        c.update_logic();
         assert_eq!(c.read_reg16(Reg16::PC), (0x200 + ADDR_SIZE));
         assert_eq!(c.read_reg8(Reg8::VA), 0xFE);
         assert_eq!(c.read_reg8(Reg8::VF), 1);
-        c.update();
+        c.update_logic();
         assert_eq!(c.read_reg16(Reg16::PC), (0x200 + 2 * ADDR_SIZE));
         assert_eq!(c.read_reg8(Reg8::VB), 1u8.overflowing_sub(0xFE).0);
         assert_eq!(c.read_reg8(Reg8::VF), 0);
 
         // Test Vf when Vx == Vy
-        c.update();
+        c.update_logic();
         assert_eq!(c.read_reg8(Reg8::VC), 0);
         assert_eq!(c.read_reg8(Reg8::VF), 0);
     }
@@ -790,11 +805,11 @@ mod tests {
         c.write_reg8(Reg8::VA, 0b10101001);
         c.load_rom(&[0x8A, 0xB6, 0x8A, 0xB6]);
         // Test registers
-        c.update();
+        c.update_logic();
         assert_eq!(c.read_reg16(Reg16::PC), (0x200 + ADDR_SIZE));
         assert_eq!(c.read_reg8(Reg8::VA), 0b01010100);
         assert_eq!(c.read_reg8(Reg8::VF), 1);
-        c.update();
+        c.update_logic();
         assert_eq!(c.read_reg8(Reg8::VA), 0b00101010);
         assert_eq!(c.read_reg8(Reg8::VF), 0);
     }
@@ -809,12 +824,12 @@ mod tests {
 
         c.load_rom(&[0x8A, 0xB7, 0x8C, 0xD5]);
         // Test registers
-        c.update();
+        c.update_logic();
         assert_eq!(c.read_reg16(Reg16::PC), (0x200 + ADDR_SIZE));
         assert_eq!(c.read_reg8(Reg8::VA), 0xFE);
         assert_eq!(c.read_reg8(Reg8::VF), 1);
         // Test Vf when Vx == Vy
-        c.update();
+        c.update_logic();
         assert_eq!(c.read_reg8(Reg8::VC), 0);
         assert_eq!(c.read_reg8(Reg8::VF), 0);
     }
@@ -825,7 +840,7 @@ mod tests {
         c.write_reg8(Reg8::VA, 0b10101010);
         c.load_rom(&[0x8A, 0xBE]);
         // Test registers
-        c.update();
+        c.update_logic();
         assert_eq!(c.read_reg16(Reg16::PC), (0x200 + ADDR_SIZE));
         assert_eq!(c.read_reg8(Reg8::VA), 0b01010100);
         assert_eq!(c.read_reg8(Reg8::VF), 1);
@@ -840,9 +855,9 @@ mod tests {
 
         c.load_rom(&[0x9A, 0xB0, 0x9A, 0xC0]);
         // Test registers
-        c.update();
+        c.update_logic();
         assert_eq!(c.read_reg16(Reg16::PC), (0x200 + ADDR_SIZE));
-        c.update();
+        c.update_logic();
         assert_eq!(c.read_reg16(Reg16::PC), (0x200 + 3 * ADDR_SIZE));
     }
     #[test]
@@ -850,7 +865,7 @@ mod tests {
         let mut c = Chip8::new();
         c.load_rom(&[0xAF, 0xBE]);
         // Test registers
-        c.update();
+        c.update_logic();
         assert_eq!(c.read_reg16(Reg16::PC), (0x200 + ADDR_SIZE));
         assert_eq!(c.read_reg16(Reg16::I), 0xFBE);
     }
@@ -861,7 +876,7 @@ mod tests {
         c.write_reg8(Reg8::V0, 0x02);
         c.load_rom(&[0xB2, 0x08]);
         // Test registers
-        c.update();
+        c.update_logic();
         assert_eq!(c.read_reg16(Reg16::PC), 0x20A);
     }
 
@@ -871,7 +886,7 @@ mod tests {
         c.write_reg8(Reg8::V0, 0x02);
         c.load_rom(&[0xC0, 0x08]);
         // Test registers
-        c.update();
+        c.update_logic();
         assert_eq!(c.read_reg16(Reg16::PC), 0x200 + ADDR_SIZE);
     }
 }
