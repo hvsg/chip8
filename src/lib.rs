@@ -257,8 +257,9 @@ impl Chip8 {
                 let pc = self.read_reg16(Reg16::PC);
                 self.write_reg16(Reg16::PC, pc + 2 * ADDR_SIZE);
                 false
+            } else {
+                true
             }
-            else {true}
         } else if i & 0xF000 == 0x4000 {
             // Skip if register Vx neq to lower byte
             let x = (i & 0x0F00) >> 8;
@@ -269,16 +270,18 @@ impl Chip8 {
                 let pc = self.read_reg16(Reg16::PC);
                 self.write_reg16(Reg16::PC, pc + 2 * ADDR_SIZE);
                 false
-            } else {true}
-        } else if i & 0xF000 == 0x5000 {
+            } else {
+                true
+            }
+        } else if i & 0xF00F == 0x5000 {
             // Skip if Vx == Vy
             let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
             let vy = to_general_reg8(((i & 0x00F0) >> 4) as usize);
             if self.read_reg8(vx) == self.read_reg8(vy) {
                 let pc = self.read_reg16(Reg16::PC);
                 self.write_reg16(Reg16::PC, pc + 2 * ADDR_SIZE);
-            }
-            false
+                false
+            } else {true}
         } else if i & 0xF000 == 0x6000 {
             // Put lower byte value into Vx
             let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
@@ -538,7 +541,7 @@ impl Chip8 {
 
 #[cfg(test)]
 mod tests {
-    use super::{Chip8, Reg8, Reg16, NUM_PIXELS, ADDR_SIZE, STACK_ADDR};
+    use super::{Chip8, Reg16, Reg8, ADDR_SIZE, NUM_PIXELS, STACK_ADDR};
     #[test]
     fn initialization() {
         let c = Chip8::new();
@@ -561,9 +564,7 @@ mod tests {
     fn cls() {
         let mut c = Chip8::new();
         c.display = [u8::MAX; NUM_PIXELS];
-        c.load_rom(&[
-            0x00, 0xE0
-        ]);
+        c.load_rom(&[0x00, 0xE0]);
         c.update();
         assert_eq!(c.display, [0u8; NUM_PIXELS]);
         assert_eq!(c.read_reg16(Reg16::PC), 0x200 + ADDR_SIZE);
@@ -572,9 +573,7 @@ mod tests {
     #[test]
     fn jp() {
         let mut c = Chip8::new();
-        c.load_rom(&[
-            0x1F, 0xF2
-        ]);
+        c.load_rom(&[0x1F, 0xF2]);
         c.update();
         assert_eq!(c.read_reg16(Reg16::PC), 0xFF2);
     }
@@ -582,15 +581,11 @@ mod tests {
     #[test]
     fn call_ret() {
         let mut c = Chip8::new();
-        c.load_rom(&[
-            0x22, 0x04,
-            0x00, 0x00,
-            0x00, 0xEE,
-        ]);
-        
+        c.load_rom(&[0x22, 0x04, 0x00, 0x00, 0x00, 0xEE]);
+
         // CALL: Test stack pointer and return address
         c.update();
-        assert_eq!(c.read_reg16(Reg16::PC), (0x200 + 2*ADDR_SIZE));
+        assert_eq!(c.read_reg16(Reg16::PC), (0x200 + 2 * ADDR_SIZE));
         let sp = c.read_reg8(Reg8::SP);
         assert_eq!(sp, STACK_ADDR as u8);
         let addr = c.read16(sp as usize);
@@ -605,32 +600,44 @@ mod tests {
     fn i3xnn_skip_eq() {
         let mut c = Chip8::new();
         c.write_reg8(Reg8::VA, 0xAA);
-        c.load_rom(&[
-            0x3A, 0xAB,
-            0x3A, 0xAA,
-        ]);
+        c.load_rom(&[0x3A, 0xAB, 0x3A, 0xAA]);
 
         // Test skip
         c.update();
         assert_eq!(c.read_reg16(Reg16::PC), (0x200 + ADDR_SIZE));
         c.update();
-        assert_eq!(c.read_reg16(Reg16::PC), (0x200 + 3*ADDR_SIZE));
-
+        assert_eq!(c.read_reg16(Reg16::PC), (0x200 + 3 * ADDR_SIZE));
     }
 
     #[test]
     fn i4xnn_skip_neq() {
         let mut c = Chip8::new();
         c.write_reg8(Reg8::VA, 0xAA);
+        c.load_rom(&[0x4A, 0xAA, 0x4A, 0xAB]);
+
+        // Test skip
+        c.update();
+        assert_eq!(c.read_reg16(Reg16::PC), (0x200 + ADDR_SIZE));
+        c.update();
+        assert_eq!(c.read_reg16(Reg16::PC), (0x200 + 3 * ADDR_SIZE));
+    }
+
+    #[test]
+    fn i5xy0_skip_xy_eq() {
+        let mut c = Chip8::new();
+        c.write_reg8(Reg8::VA, 0xAA);
+        c.write_reg8(Reg8::VB, 0xAB);
+        c.write_reg8(Reg8::VC, 0xAA);
+
         c.load_rom(&[
-            0x4A, 0xAA,
-            0x4A, 0xAB,
+            0x5A, 0xB0, 
+            0x5A, 0xC0
         ]);
 
         // Test skip
         c.update();
         assert_eq!(c.read_reg16(Reg16::PC), (0x200 + ADDR_SIZE));
         c.update();
-        assert_eq!(c.read_reg16(Reg16::PC), (0x200 + 3*ADDR_SIZE));
+        assert_eq!(c.read_reg16(Reg16::PC), (0x200 + 3 * ADDR_SIZE));
     }
 }
