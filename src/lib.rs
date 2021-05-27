@@ -391,9 +391,9 @@ impl Chip8 {
         } else if i & 0xF000 == 0xC000 {
             //  Vx = random & lower
             let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
-            let x = self.read_reg8(vx);
+            let nn = (i & 0x00FF) as u8;
             let r: u8 = rand::random();
-            self.write_reg8(vx, r & x);
+            self.write_reg8(vx, r & nn);
             true
         } else if i & 0xF000 == 0xD000 {
             // XOR sprite of n bytes at x and y and set VF to 1 if pixel erased
@@ -798,5 +798,34 @@ mod tests {
         assert_eq!(c.read_reg16(Reg16::PC), (0x200 + ADDR_SIZE));
         c.update();
         assert_eq!(c.read_reg16(Reg16::PC), (0x200 + 3 * ADDR_SIZE));
+    }
+    #[test]
+    fn iannn_load_register_i() {
+        let mut c = Chip8::new();
+        c.load_rom(&[0xAF, 0xBE]);
+        // Test registers
+        c.update();
+        assert_eq!(c.read_reg16(Reg16::PC), (0x200 + ADDR_SIZE));
+        assert_eq!(c.read_reg16(Reg16::I), 0xFBE);
+    }
+
+    #[test]
+    fn ibnnn_jp_v0_plus_nnn() {
+        let mut c = Chip8::new();
+        c.write_reg8(Reg8::V0, 0x02);
+        c.load_rom(&[0xB2, 0x08]);
+        // Test registers
+        c.update();
+        assert_eq!(c.read_reg16(Reg16::PC), 0x20A);
+    }
+
+    #[test]
+    fn icxnn_vx_rand_and_nn() {
+        let mut c = Chip8::new();
+        c.write_reg8(Reg8::V0, 0x02);
+        c.load_rom(&[0xC0, 0x08]);
+        // Test registers
+        c.update();
+        assert_eq!(c.read_reg16(Reg16::PC), 0x200 + ADDR_SIZE);
     }
 }
