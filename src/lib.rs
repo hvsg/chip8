@@ -55,7 +55,8 @@ pub const HEX_SPRITES: [u8; NUM_SPRITES * SPRITE_SIZE] = [
 #[derive(Clone, Copy)]
 pub enum Reg16 {
     PC = 0x0,
-    I = 0x02,
+    KB = 0x2,
+    I = 0x4,
 }
 
 /// Contains 8-bit register addresses
@@ -112,6 +113,19 @@ impl Chip8 {
         // Load sprites
         s.load_sprites();
         s
+    }
+
+    /// Returns slice to screen texture in format of monochromatic single byte texture.
+    pub fn get_screen_texture(&self) -> &[u8; NUM_PIXELS] {
+        &self.display
+    }
+
+    /// Accepts hex value input (0-F) representing key and updates input state.
+    pub fn read_input(&mut self, input: u8, pressed: bool) {
+        let mask = 0x1u16 << input;
+        let kb = self.read_reg16(Reg16::KB);
+        let value = if pressed { kb | mask } else { kb & !mask };
+        self.write_reg16(Reg16::KB, value);
     }
 
     /// Get memory address of hex digit (0-9 or A-F)

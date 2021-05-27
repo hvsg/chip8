@@ -8,3 +8,5 @@ edition = "2018"
 
 [dependencies]
 rand = "0.8.3"
+pixels = "0.3.0"
+winit = "0.25.0"
