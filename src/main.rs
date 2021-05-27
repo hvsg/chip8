@@ -11,9 +11,6 @@ fn blit_ru8_to_rgbau8(src: &[u8], dst: &mut [u8]) {
         dst[4 * i + 2] = *pixel;
         dst[4 * i + 3] = u8::MAX;
     });
-    // dst.iter_mut().for_each(|pixel| {
-    //     *pixel = u8::MAX / 2;
-    // });
 }
 fn main() {
     println!("Loading rom...");

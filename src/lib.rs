@@ -13,7 +13,7 @@ pub const STACK_ADDR: usize = Reg8::ST as usize + 1;
 /// Number of bytes used for the stack
 pub const STACK_SIZE: usize = 16 * 2;
 /// Stack address should be less than this address
-pub const STACK_LAST_ADDR: usize = STACK_ADDR + STACK_SIZE - 2;
+pub const MAXIMUM_STACK_ADDR: usize = STACK_ADDR + STACK_SIZE - 2;
 /// Screen width in pixels
 pub const SCREEN_WIDTH: usize = 64;
 /// Screen height in pixels
@@ -162,7 +162,7 @@ impl Chip8 {
         let index = y * SCREEN_WIDTH + x;
         let pixel = self.display[index];
         self.display[index] ^= value;
-        (pixel == value) as u8
+        (pixel > 0 && value > 0) as u8
     }
 
     /// Read 8-bit register
@@ -217,14 +217,16 @@ impl Chip8 {
             true
         } else if i == 0x00EE {
             // RET
-            let sp = self.read_reg8(Reg8::SP);
             // Check if stack is empty
-            if sp < STACK_ADDR as u8 {
+            let sp = self.read_reg8(Reg8::SP);
+            if (sp as usize) < STACK_ADDR {
                 panic!("Chip-8: Stack Underflow");
             }
             // get return address stored at stack pointer
             let addr = self.read16(sp as usize);
-            self.write_reg16(Reg16::PC, addr);
+            // Need to increment address else we get an infinite loop!
+            self.write_reg16(Reg16::PC, addr + ADDR_SIZE);
+            // decrement stack pointer
             self.write_reg8(Reg8::SP, sp - ADDR_SIZE as u8);
             false
         } else if i & 0xF000 == 0x1000 {
@@ -233,18 +235,16 @@ impl Chip8 {
             false
         } else if i & 0xF000 == 0x2000 {
             // CALL addr
-            let mut sp = self.read_reg8(Reg8::SP);
+            let sp = self.read_reg8(Reg8::SP);
             // check if stack is full
-            sp += ADDR_SIZE as u8;
-            if sp > STACK_LAST_ADDR as u8 {
+            if sp == MAXIMUM_STACK_ADDR as u8 {
                 panic!("Chip-8: Stack Overflow");
             }
             // Increment stack pointer
-            self.write_reg8(Reg8::SP, sp);
-            // Put current PC on top of stack
-            let pc = self.read_reg16(Reg16::PC);
-            self.write16(sp as usize, pc);
-            // Update PC
+            self.write_reg8(Reg8::SP, sp + ADDR_SIZE as u8);
+            // Put current PC on top of stack (store PC at stack pointer)
+            self.write16((sp + ADDR_SIZE as u8) as usize, self.read_reg16(Reg16::PC));
+            // Update PC (JP)
             self.write_reg16(Reg16::PC, 0x0FFF & i);
             false
         } else if i & 0xF000 == 0x3000 {
@@ -413,7 +413,12 @@ impl Chip8 {
                 // assuming that vx,vy corresponds to first byte (top-left corner) of sprite
                 for k in 0..8 {
                     let draw_x = x.overflowing_add(k).0;
-                    erased |= self.draw(draw_x as usize, draw_y as usize, byte & (0x1 << 7));
+                    let brightness = if (byte & (0x1u8 << 7)) > 0 {
+                        u8::MAX
+                    } else {
+                        0u8
+                    };
+                    erased |= self.draw(draw_x as usize, draw_y as usize, brightness);
                     byte <<= 1;
                 }
                 draw_y = draw_y.overflowing_add(1).0;
@@ -548,7 +553,7 @@ impl Chip8 {
 
 #[cfg(test)]
 mod tests {
-    use super::{Chip8, Reg16, Reg8, ADDR_SIZE, NUM_PIXELS, STACK_ADDR};
+    use super::{Chip8, Reg16, Reg8, ADDR_SIZE, NUM_PIXELS, STACK_ADDR, STACK_SIZE};
     #[test]
     fn initialization() {
         let c = Chip8::new();
@@ -592,16 +597,35 @@ mod tests {
 
         // CALL: Test stack pointer and return address
         c.update();
-        assert_eq!(c.read_reg16(Reg16::PC), (0x200 + 2 * ADDR_SIZE));
+        assert_eq!(c.read_reg16(Reg16::PC), (0x204));
         let sp = c.read_reg8(Reg8::SP);
         assert_eq!(sp, STACK_ADDR as u8);
         let addr = c.read16(sp as usize);
         assert_eq!(addr, 0x200);
-
         // RET: Test stack pointer and restored address
         c.update();
         assert_eq!(c.read_reg16(Reg16::PC), 0x200);
-        assert_eq!(c.read_reg8(Reg8::SP), (STACK_ADDR - 2) as u8);
+        assert_eq!(c.read_reg8(Reg8::SP), (STACK_ADDR as u8 - 2));
+    }
+
+    #[test]
+    fn call_ret_16() {
+        let mut c = Chip8::new();
+        for i in 1..=16 {
+            c.execute_instruction(0x2200 + i * ADDR_SIZE);
+            assert_eq!(c.read_reg16(Reg16::PC), (0x200 + i * ADDR_SIZE));
+            let sp = c.read_reg8(Reg8::SP);
+            assert_eq!(sp, (STACK_ADDR as u8 + ((i - 1) * ADDR_SIZE) as u8));
+            let addr = c.read16(sp as usize);
+            assert_eq!(addr, (0x200 + (i - 1) * ADDR_SIZE));
+        }
+        // RET: Test stack pointer and restored address
+        for i in (0..=15).rev() {
+            c.execute_instruction(0x00EE);
+            assert_eq!(c.read_reg16(Reg16::PC), (0x200 + i * ADDR_SIZE));
+            let sp = c.read_reg8(Reg8::SP);
+            assert_eq!(sp, (STACK_ADDR - 2 + 2 * (i as usize)) as u8);
+        }
     }
     #[test]
     fn i3xnn_skip_eq() {
