@@ -55,6 +55,9 @@ fn main() {
     .build()
     .expect("Failed to create pixel buffer");
 
+    let mut time = std::time::Instant::now();
+    let mut accumulator = 0.0;
+    const DT: f64 = 1.0 / 60.0;
     event_loop.run(move |event, target, control_flow| match event {
         winit::event::Event::WindowEvent { window_id, event } => match event {
             winit::event::WindowEvent::CloseRequested => {
@@ -101,9 +104,16 @@ fn main() {
             _ => {}
         },
         winit::event::Event::MainEventsCleared => {
-            window.request_redraw();
-            chip8.update();
-            blit_ru8_to_rgbau8(chip8.get_screen_texture(), pixels.get_frame());
+            let current = std::time::Instant::now();
+            accumulator += (current - time).as_secs_f64();
+            time = current;
+
+            if accumulator > DT {
+                chip8.update();
+                blit_ru8_to_rgbau8(chip8.get_screen_texture(), pixels.get_frame());
+                window.request_redraw();
+                accumulator -= DT;
+            }
         }
         winit::event::Event::RedrawRequested(window_id) => {
             pixels.render().expect("Error rendering display.");
