@@ -58,7 +58,7 @@ fn main() {
     let mut time = std::time::Instant::now();
     let mut logic_accum = 0.0;
     let mut timer_accum = 0.0;
-    const LOGIC_DT: f64 = 1.0 / 600.0;
+    const LOGIC_DT: f64 = 1.0 / 500.0;
     const TIMER_DT: f64 = 1.0 / 60.0;
     event_loop.run(move |event, target, control_flow| match event {
         winit::event::Event::WindowEvent { window_id, event } => match event {
@@ -112,14 +112,14 @@ fn main() {
             timer_accum += delta;
             time = current;
 
-            if logic_accum >= LOGIC_DT {
+            while logic_accum >= LOGIC_DT {
                 chip8.update_logic();
                 blit_ru8_to_rgbau8(chip8.get_screen_texture(), pixels.get_frame());
                 window.request_redraw();
                 logic_accum -= LOGIC_DT;
             }
 
-            if timer_accum >= TIMER_DT {
+            while timer_accum >= TIMER_DT {
                 chip8.update_timers();
                 timer_accum -= TIMER_DT;
             }
