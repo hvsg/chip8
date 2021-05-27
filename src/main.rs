@@ -5,10 +5,12 @@ use winit::event::VirtualKeyCode;
 
 fn blit_ru8_to_rgbau8(src: &[u8], dst: &mut [u8]) {
     assert_eq!(src.len() * 4, dst.len());
+    let colors = [[0x38, 0x2B, 0x26], [0xB8, 0xC2, 0xB9]];
     src.iter().enumerate().for_each(|(i, pixel)| {
-        dst[4 * i] = *pixel;
-        dst[4 * i + 1] = *pixel;
-        dst[4 * i + 2] = *pixel;
+        let c = (0x1 & *pixel) as usize;
+        dst[4 * i] = colors[c][0];
+        dst[4 * i + 1] = colors[c][1];
+        dst[4 * i + 2] = colors[c][2];
         dst[4 * i + 3] = u8::MAX;
     });
 }

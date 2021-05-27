@@ -224,11 +224,10 @@ impl Chip8 {
             }
             // get return address stored at stack pointer
             let addr = self.read16(sp as usize);
-            // Need to increment address else we get an infinite loop!
-            self.write_reg16(Reg16::PC, addr + ADDR_SIZE);
+            self.write_reg16(Reg16::PC, addr);
             // decrement stack pointer
             self.write_reg8(Reg8::SP, sp - ADDR_SIZE as u8);
-            false
+            true
         } else if i & 0xF000 == 0x1000 {
             // JP addr
             self.write_reg16(Reg16::PC, 0x0FFF & i);
@@ -613,11 +612,9 @@ mod tests {
         assert_eq!(c.read_reg16(Reg16::PC), (0x204));
         let sp = c.read_reg8(Reg8::SP);
         assert_eq!(sp, STACK_ADDR as u8);
-        let addr = c.read16(sp as usize);
-        assert_eq!(addr, 0x200);
         // RET: Test stack pointer and restored address
         c.update();
-        assert_eq!(c.read_reg16(Reg16::PC), 0x200);
+        assert_eq!(c.read_reg16(Reg16::PC), 0x202);
         assert_eq!(c.read_reg8(Reg8::SP), (STACK_ADDR as u8 - 2));
     }
 
@@ -629,13 +626,11 @@ mod tests {
             assert_eq!(c.read_reg16(Reg16::PC), (0x200 + i * ADDR_SIZE));
             let sp = c.read_reg8(Reg8::SP);
             assert_eq!(sp, (STACK_ADDR as u8 + ((i - 1) * ADDR_SIZE) as u8));
-            let addr = c.read16(sp as usize);
-            assert_eq!(addr, (0x200 + (i - 1) * ADDR_SIZE));
         }
         // RET: Test stack pointer and restored address
         for i in (0..=15).rev() {
             c.execute_instruction(0x00EE);
-            assert_eq!(c.read_reg16(Reg16::PC), (0x200 + i * ADDR_SIZE));
+            assert_eq!(c.read_reg16(Reg16::PC), (0x200 + (i + 1) * ADDR_SIZE));
             let sp = c.read_reg8(Reg8::SP);
             assert_eq!(sp, (STACK_ADDR - 2 + 2 * (i as usize)) as u8);
         }
@@ -769,7 +764,10 @@ mod tests {
         let mut c = Chip8::new();
         c.write_reg8(Reg8::VA, 0xFF);
         c.write_reg8(Reg8::VB, 0x01);
-        c.load_rom(&[0x8A, 0xB5, 0x8B, 0xA5]);
+        c.write_reg8(Reg8::VC, 0x01);
+        c.write_reg8(Reg8::VD, 0x01);
+
+        c.load_rom(&[0x8A, 0xB5, 0x8B, 0xA5, 0x8C, 0xD5]);
         // Test registers
         c.update();
         assert_eq!(c.read_reg16(Reg16::PC), (0x200 + ADDR_SIZE));
@@ -778,6 +776,11 @@ mod tests {
         c.update();
         assert_eq!(c.read_reg16(Reg16::PC), (0x200 + 2 * ADDR_SIZE));
         assert_eq!(c.read_reg8(Reg8::VB), 1u8.overflowing_sub(0xFE).0);
+        assert_eq!(c.read_reg8(Reg8::VF), 0);
+
+        // Test Vf when Vx == Vy
+        c.update();
+        assert_eq!(c.read_reg8(Reg8::VC), 0);
         assert_eq!(c.read_reg8(Reg8::VF), 0);
     }
 
@@ -801,13 +804,19 @@ mod tests {
         let mut c = Chip8::new();
         c.write_reg8(Reg8::VA, 0x01);
         c.write_reg8(Reg8::VB, 0xFF);
+        c.write_reg8(Reg8::VC, 0x01);
+        c.write_reg8(Reg8::VD, 0x01);
 
-        c.load_rom(&[0x8A, 0xB7]);
+        c.load_rom(&[0x8A, 0xB7, 0x8C, 0xD5]);
         // Test registers
         c.update();
         assert_eq!(c.read_reg16(Reg16::PC), (0x200 + ADDR_SIZE));
         assert_eq!(c.read_reg8(Reg8::VA), 0xFE);
         assert_eq!(c.read_reg8(Reg8::VF), 1);
+        // Test Vf when Vx == Vy
+        c.update();
+        assert_eq!(c.read_reg8(Reg8::VC), 0);
+        assert_eq!(c.read_reg8(Reg8::VF), 0);
     }
 
     #[test]
