@@ -551,7 +551,7 @@ impl Chip8 {
         }
     }
 
-    /// Call at 60 Hz
+    /// Call at ~500 Hz
     pub fn update_logic(&mut self) {
         // Execute instruction at program counter
         let pc = self.read_reg16(Reg16::PC);
@@ -562,6 +562,7 @@ impl Chip8 {
         self.write_reg16(Reg16::PKB, kb);
     }
 
+    /// Call at 60 Hz
     pub fn update_timers(&mut self) {
         // Delay Timer
         let dt = self.read_reg8(Reg8::DT);
