@@ -143,6 +143,11 @@ impl Chip8 {
         dst.copy_from_slice(rom);
     }
 
+    /// Returns true if buzzer is on, false otherwise
+    pub fn buzzer_active(&mut self) -> bool {
+        self.read_reg8(Reg8::ST) > 0
+    }
+
     /// Get memory address of hex digit (0-9 or A-F)
     fn get_digit_location(digit: u8) -> u16 {
         assert!(digit <= 0xF);

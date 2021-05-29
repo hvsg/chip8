@@ -2,6 +2,8 @@ use chip8::Chip8;
 use pixels;
 use winit;
 use winit::event::VirtualKeyCode;
+mod audio;
+use audio::Buzzer;
 
 fn blit_ru8_to_rgbau8(src: &[u8], dst: &mut [u8]) {
     assert_eq!(src.len() * 4, dst.len());
@@ -54,6 +56,9 @@ fn main() {
     })
     .build()
     .expect("Failed to create pixel buffer");
+
+    let mut buzzer = Buzzer::new();
+    buzzer.set_active(true);
 
     let mut time = std::time::Instant::now();
     let mut logic_accum = 0.0;
