@@ -15,11 +15,9 @@ pub const STACK_SIZE: usize = 16 * 2;
 /// Stack address should be less than this address
 pub const MAXIMUM_STACK_ADDR: usize = STACK_ADDR + STACK_SIZE - 2;
 /// Screen width in pixels
-pub const SCREEN_WIDTH: usize = 64;
+const SCREEN_WIDTH: usize = 64;
 /// Screen height in pixels
-pub const SCREEN_HEIGHT: usize = 32;
-/// Number of Pixels
-pub const NUM_PIXELS: usize = SCREEN_WIDTH * SCREEN_HEIGHT;
+const SCREEN_HEIGHT: usize = 32;
 /// Size in bytes of program counter
 pub const ADDR_SIZE: u16 = 2;
 /// Base address of built-in sprites
@@ -31,6 +29,8 @@ pub const SPRITE_SIZE: usize = 5;
 pub const NUM_SPRITES: usize = 16;
 /// Start address of program
 pub const PROGRAM_START_ADDR: usize = 0x200;
+/// Start address of hires mode program
+pub const HIRES_PROGRAM_START_ADDR: usize = 0x2C0;
 
 // From Cowgod's Chip-8 Technical Reference v1.0 by Thomas P. Greene
 pub const HEX_SPRITES: [u8; NUM_SPRITES * SPRITE_SIZE] = [
@@ -101,10 +101,12 @@ fn to_general_reg8(x: usize) -> Reg8 {
 
 /// Data structure for the Chip-8 Interpreter
 pub struct Chip8 {
-    // RAM
+    /// RAM
     memory: [u8; MEMORY_SIZE],
-    // Display memory, each byte corresponds to a pixel
-    display: [u8; NUM_PIXELS],
+    /// Display memory, each byte corresponds to a pixel
+    display: Vec<u8>,
+    /// Screen dimensions
+    dimensions: (usize, usize),
 }
 
 impl Chip8 {
@@ -114,7 +116,8 @@ impl Chip8 {
 
         let mut s = Self {
             memory: [0; MEMORY_SIZE],
-            display: [0; NUM_PIXELS],
+            display: Vec::new(),
+            dimensions: (0, 0),
         };
         // Initialize registers
         s.write_reg16(Reg16::PC, PROGRAM_START_ADDR as u16);
@@ -125,8 +128,15 @@ impl Chip8 {
     }
 
     /// Returns slice to screen texture in format of monochromatic single byte texture.
-    pub fn get_screen_texture(&self) -> &[u8; NUM_PIXELS] {
+    /// Should call after loading ROM.
+    pub fn get_screen_texture(&self) -> &[u8] {
         &self.display
+    }
+
+    /// Returns tuple of screen (width, height) in pixels.
+    /// Should call after loading ROM
+    pub fn get_dimensions(&self) -> (usize, usize) {
+        self.dimensions
     }
 
     /// Accepts hex value input (0-F) representing key and updates input state.
@@ -137,10 +147,31 @@ impl Chip8 {
         self.write_reg16(Reg16::KB, value);
     }
 
-    /// Loads the ROM into memory
+    /// Loads the ROM into memory.
+    /// Should only be called once before initializing the display.
     pub fn load_rom(&mut self, rom: &[u8]) {
         let dst = &mut self.memory[PROGRAM_START_ADDR..(PROGRAM_START_ADDR + rom.len())];
         dst.copy_from_slice(rom);
+
+        // Initialize display
+        let x1 = rom[0];
+        let x0 = rom[1];
+        let i = u16::from_be_bytes([x1, x0]);
+        // Check for high-res mode
+        let (w, h) = if i == 0x1260 {
+            self.write_reg16(Reg16::PC, HIRES_PROGRAM_START_ADDR as u16);
+            (SCREEN_WIDTH, SCREEN_HEIGHT * 2)
+        } else {
+            self.write_reg16(Reg16::PC, PROGRAM_START_ADDR as u16);
+            (SCREEN_WIDTH, SCREEN_HEIGHT)
+        };
+
+        if self.dimensions != (0, 0) {
+            eprintln!("Warning: Tried to load ROM with display already initialized.")
+        }
+
+        self.display = vec![0; w * h];
+        self.dimensions = (w, h);
     }
 
     /// Returns true if buzzer is on, false otherwise
@@ -163,7 +194,10 @@ impl Chip8 {
 
     /// Turns off all pixels
     pub fn clear_screen(&mut self) {
-        self.display = [0; NUM_PIXELS];
+        // self.display = [0; NUM_PIXELS];
+        self.display.iter_mut().for_each(|byte| {
+            *byte = 0;
+        });
     }
 
     /// XOR byte for given (x, y) coordinates
@@ -171,7 +205,8 @@ impl Chip8 {
     /// Returns 1 if bit was erased, otherwise 0
     fn draw(&mut self, x: usize, y: usize, value: u8) -> u8 {
         // compute address
-        let index = y * SCREEN_WIDTH + x;
+        let (w, _) = self.get_dimensions();
+        let index = y * w + x;
         let pixel = self.display[index];
         self.display[index] ^= value;
         (pixel > 0 && value > 0) as u8
@@ -223,7 +258,7 @@ impl Chip8 {
 
     /// Execute instruction i
     fn execute_instruction(&mut self, i: u16) {
-        let advance_pc: bool = if i == 0x00E0 {
+        let advance_pc: bool = if i == 0x00E0 || i == 0x230 {
             // CLS
             self.clear_screen();
             true
@@ -417,13 +452,13 @@ impl Chip8 {
 
             let sprite = self.read_reg16(Reg16::I);
             let mut erased: u8 = 0;
-
+            let (w, h) = self.get_dimensions();
             for j in 0..n {
                 // load byte
                 let mut byte = self.read8(sprite.saturating_add(j as u16) as usize);
                 // assuming that vx,vy corresponds to first byte (top-left corner) of sprite
                 for k in 0..8 {
-                    let draw_x = x.overflowing_add(k).0;
+                    let draw_x = x.overflowing_add(k).0 % w as u8;
                     let brightness = if (byte & (0x1u8 << 7)) > 0 {
                         u8::MAX
                     } else {
@@ -432,7 +467,7 @@ impl Chip8 {
                     erased |= self.draw(draw_x as usize, draw_y as usize, brightness);
                     byte <<= 1;
                 }
-                draw_y = draw_y.overflowing_add(1).0;
+                draw_y = draw_y.overflowing_add(1).0 % h as u8;
             }
             self.write_reg8(Reg8::VF, erased);
             true
@@ -586,7 +621,7 @@ impl Chip8 {
 
 #[cfg(test)]
 mod tests {
-    use super::{Chip8, Reg16, Reg8, ADDR_SIZE, NUM_PIXELS, STACK_ADDR, STACK_SIZE};
+    use super::{Chip8, Reg16, Reg8, ADDR_SIZE, STACK_ADDR, STACK_SIZE};
     #[test]
     fn initialization() {
         let c = Chip8::new();
@@ -608,10 +643,10 @@ mod tests {
     #[test]
     fn cls() {
         let mut c = Chip8::new();
-        c.display = [u8::MAX; NUM_PIXELS];
+        c.display = [u8::MAX; 64 * 32].to_vec();
         c.load_rom(&[0x00, 0xE0]);
         c.update_logic();
-        assert_eq!(c.display, [0u8; NUM_PIXELS]);
+        assert_eq!(c.display, [0u8; 64 * 32]);
         assert_eq!(c.read_reg16(Reg16::PC), 0x200 + ADDR_SIZE);
     }
 

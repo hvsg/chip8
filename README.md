@@ -1,6 +1,7 @@
 # Chip-8 Interpreter
 
 Written in Rust without viewing tutorials or other implementations.
+Supports regular 64x32 Chip-8 programs and some HiRes 64x64 Chip-8 programs.
 The 1-bit color palette is from [here](https://lospec.com/palette-list/paperback-2).
 ## Usage
 Requires Rust to be installed.
@@ -13,11 +14,9 @@ Many ROMs available on GitHub.
 ## Controls
 Valid keys are 0-9 (row or numpad) and A-F.
 
-## Sound
-The single tone buzzer is not yet implemented.
-
-## Bugs
+## Known Issues
 There may be some bugs since some parts of the specification are unclear and expected behaviour between test ROMs differ.
+The buzzer audio seems to work on Linux but not Windows.
 
 ## Library Documentation
 If needed the package can be built as a library. To view documentation run `cargo doc --open`.

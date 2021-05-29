@@ -28,9 +28,9 @@ fn main() {
     println!("Initializing Chip-8!");
     let mut chip8 = Chip8::new();
     chip8.load_rom(rom.as_slice());
+    let (w, h) = chip8.get_dimensions();
     let event_loop = winit::event_loop::EventLoop::new();
-    let physical_size =
-        winit::dpi::PhysicalSize::new(chip8::SCREEN_WIDTH as u32, chip8::SCREEN_HEIGHT as u32);
+    let physical_size = winit::dpi::PhysicalSize::new(w as u32, h as u32);
     let window = winit::window::WindowBuilder::new()
         .with_title("Chip-8 Interpreter")
         .build(&event_loop)
@@ -45,17 +45,13 @@ fn main() {
         logical_size.height.round() as u32,
         &window,
     );
-    let mut pixels = pixels::PixelsBuilder::new(
-        chip8::SCREEN_WIDTH as u32,
-        chip8::SCREEN_HEIGHT as u32,
-        texture,
-    )
-    .request_adapter_options(pixels::wgpu::RequestAdapterOptions {
-        compatible_surface: None,
-        power_preference: pixels::wgpu::PowerPreference::HighPerformance,
-    })
-    .build()
-    .expect("Failed to create pixel buffer");
+    let mut pixels = pixels::PixelsBuilder::new(w as u32, h as u32, texture)
+        .request_adapter_options(pixels::wgpu::RequestAdapterOptions {
+            compatible_surface: None,
+            power_preference: pixels::wgpu::PowerPreference::HighPerformance,
+        })
+        .build()
+        .expect("Failed to create pixel buffer");
 
     let mut buzzer = Buzzer::new(1046);
 
