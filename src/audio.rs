@@ -20,17 +20,13 @@ impl Buzzer {
                 .default_output_device()
                 .expect("Could not get a default audio output device!");
 
-            // let supported_configs_range = device
-            //     .supported_output_configs()
-            //     .expect("Could not get any supported configs!");
-
             let config = device
                 .default_output_config()
                 .expect("Could not get default audio output config!");
 
             println!("config: {:?}", config);
             println!("Starting audio stream!");
-            match config.sample_format() {
+            let stream = match config.sample_format() {
                 cpal::SampleFormat::F32 => {
                     start_stream::<f32>(&device, config, stream_active, frequency)
                 }
@@ -69,18 +65,12 @@ fn start_stream<T: cpal::Sample>(
     let mut offset = 0usize;
     let channels = config.channels();
 
-    // let config = cpal::StreamConfig{
-    //     channels: 2,
-    //     sample_rate: config.sample_rate(),
-    //     buffer_size: cpal::BufferSize::Fixed(480),
-    // };
-
     let stream = device
         .build_output_stream(
             &config.into(),
             move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
                 let multiplier = if stream_active.load(Ordering::SeqCst) {
-                    1.0
+                    0.5
                 } else {
                     0.0
                 };

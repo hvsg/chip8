@@ -57,7 +57,7 @@ fn main() {
     .build()
     .expect("Failed to create pixel buffer");
 
-    let mut buzzer = Buzzer::new(523);
+    let mut buzzer = Buzzer::new(1046);
 
     let mut time = std::time::Instant::now();
     let mut logic_accum = 0.0;
