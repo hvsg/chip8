@@ -57,8 +57,7 @@ fn main() {
     .build()
     .expect("Failed to create pixel buffer");
 
-    let mut buzzer = Buzzer::new();
-    buzzer.set_active(true);
+    let mut buzzer = Buzzer::new(523);
 
     let mut time = std::time::Instant::now();
     let mut logic_accum = 0.0;
@@ -123,7 +122,7 @@ fn main() {
                 window.request_redraw();
                 logic_accum -= LOGIC_DT;
             }
-
+            buzzer.set_active(chip8.buzzer_active());
             while timer_accum >= TIMER_DT {
                 chip8.update_timers();
                 timer_accum -= TIMER_DT;
