@@ -1,6 +1,4 @@
 use chip8::Chip8;
-use pixels;
-use winit;
 use winit::event::VirtualKeyCode;
 mod audio;
 use audio::Buzzer;
@@ -60,8 +58,11 @@ fn main() {
     let mut timer_accum = 0.0;
     const LOGIC_DT: f64 = 1.0 / 500.0;
     const TIMER_DT: f64 = 1.0 / 60.0;
-    event_loop.run(move |event, target, control_flow| match event {
-        winit::event::Event::WindowEvent { window_id, event } => match event {
+    event_loop.run(move |event, _, control_flow| match event {
+        winit::event::Event::WindowEvent {
+            window_id: _,
+            event,
+        } => match event {
             winit::event::WindowEvent::CloseRequested => {
                 *control_flow = winit::event_loop::ControlFlow::Exit;
             }
@@ -69,9 +70,9 @@ fn main() {
                 pixels.resize_surface(physical_size.width, physical_size.height);
             }
             winit::event::WindowEvent::KeyboardInput {
-                device_id,
+                device_id: _,
                 input,
-                is_synthetic,
+                is_synthetic: _,
             } => {
                 if let Some(keycode) = input.virtual_keycode {
                     let hex = match keycode {
@@ -124,7 +125,7 @@ fn main() {
                 timer_accum -= TIMER_DT;
             }
         }
-        winit::event::Event::RedrawRequested(window_id) => {
+        winit::event::Event::RedrawRequested(_window_id) => {
             pixels.render().expect("Error rendering display.");
         }
         _ => {}

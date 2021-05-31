@@ -1,5 +1,3 @@
-use rand;
-
 /// Big Endian
 /// Each address refers to a single byte
 /// last byte is at index 4095
@@ -59,7 +57,7 @@ pub enum Reg16 {
     /// Program Counter
     PC = 0x0,
     /// Previous Keyboard Input
-    PKB = 0x2,
+    PK = 0x2,
     /// Current Keyboard Input
     KB = 0x4,
     /// Register I
@@ -109,10 +107,19 @@ pub struct Chip8 {
     dimensions: (usize, usize),
 }
 
+impl Default for Chip8 {
+    /// Initializes default instance of Chip-8
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Chip8 {
     /// Creates and initializes new instance of Chip-8
     pub fn new() -> Self {
-        assert!(PROGRAM_START_ADDR > (SPRITE_BASE_ADDR + SPRITE_SIZE * NUM_SPRITES));
+        static_assertions::const_assert!(
+            PROGRAM_START_ADDR > (SPRITE_BASE_ADDR + SPRITE_SIZE * NUM_SPRITES)
+        );
 
         let mut s = Self {
             memory: [0; MEMORY_SIZE],
@@ -445,7 +452,7 @@ impl Chip8 {
             // XOR sprite of n bytes at x and y and set VF to 1 if pixel erased
             let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
             let vy = to_general_reg8(((i & 0x00F0) >> 4) as usize);
-            let n = (i & 0x000F) as u8;
+            let num_bytes = (i & 0x000F) as u8;
 
             let x = self.read_reg8(vx);
             let mut draw_y = self.read_reg8(vy);
@@ -453,7 +460,7 @@ impl Chip8 {
             let sprite = self.read_reg16(Reg16::I);
             let mut erased: u8 = 0;
             let (w, h) = self.get_dimensions();
-            for j in 0..n {
+            for j in 0..num_bytes {
                 // load byte
                 let mut byte = self.read8(sprite.saturating_add(j as u16) as usize);
                 // assuming that vx,vy corresponds to first byte (top-left corner) of sprite
@@ -507,7 +514,7 @@ impl Chip8 {
             // Wait for key press and store key value in Vx
             // This should only trigger for new key presses
             let mut kb = self.read_reg16(Reg16::KB);
-            let pkb = self.read_reg16(Reg16::PKB);
+            let pkb = self.read_reg16(Reg16::PK);
             let mut value = 0;
             while kb > 0 {
                 kb >>= 1;
@@ -599,7 +606,7 @@ impl Chip8 {
         self.execute_instruction(instruction);
         // Store previous keyboard input
         let kb = self.read_reg16(Reg16::KB);
-        self.write_reg16(Reg16::PKB, kb);
+        self.write_reg16(Reg16::PK, kb);
     }
 
     /// Call at 60 Hz
@@ -621,7 +628,7 @@ impl Chip8 {
 
 #[cfg(test)]
 mod tests {
-    use super::{Chip8, Reg16, Reg8, ADDR_SIZE, STACK_ADDR, STACK_SIZE};
+    use super::{Chip8, Reg16, Reg8, ADDR_SIZE, STACK_ADDR};
     #[test]
     fn initialization() {
         let c = Chip8::new();

@@ -1,5 +1,5 @@
-use cpal;
 use cpal::traits::{DeviceTrait, HostTrait};
+use std::mem::ManuallyDrop;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -37,9 +37,11 @@ impl Buzzer {
                     start_stream::<u16>(&device, config, stream_active, frequency)
                 }
             };
+            let stream = ManuallyDrop::new(stream);
             println!("Parking audio thread!");
             std::thread::park();
             println!("Terminating audio thread!");
+            ManuallyDrop::into_inner(stream);
         });
 
         Buzzer { active, thread }
@@ -65,7 +67,7 @@ fn start_stream<T: cpal::Sample>(
     let mut offset = 0usize;
     let channels = config.channels();
 
-    let stream = device
+    device
         .build_output_stream(
             &config.into(),
             move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
@@ -86,8 +88,7 @@ fn start_stream<T: cpal::Sample>(
             },
             move |err| eprintln!("Audio Output Stream Error: {}", err),
         )
-        .expect("Failed to build output audio stream!");
-    stream
+        .expect("Failed to build output audio stream!")
 }
 
 /// Generates sine wave with samples for 1 second given sample rate and frequency
