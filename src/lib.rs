@@ -278,319 +278,77 @@ impl Chip8 {
 
     /// Execute instruction i
     fn execute_instruction(&mut self, i: u16) {
-        let advance_pc: bool = if i == 0x00E0 || i == 0x230 {
-            // CLS
-            self.clear_screen();
-            true
+        if i == 0x00E0 || i == 0x230 {
+            self.inst_cls(i);
         } else if i == 0x00EE {
-            // RET
-            // Check if stack is empty
-            let sp = self.read_reg8(Reg8::SP);
-            if (sp as usize) < STACK_ADDR {
-                panic!("Chip-8: Stack Underflow");
-            }
-            // get return address stored at stack pointer
-            let addr = self.read16(sp as usize);
-            self.write_reg16(Reg16::PC, addr);
-            // decrement stack pointer
-            self.write_reg8(Reg8::SP, sp - ADDR_SIZE as u8);
-            true
+            self.inst_ret(i);
         } else if i & 0xF000 == 0x1000 {
-            // JP addr
-            self.write_reg16(Reg16::PC, 0x0FFF & i);
-            false
+            self.inst_jp(i);
         } else if i & 0xF000 == 0x2000 {
-            // CALL addr
-            let sp = self.read_reg8(Reg8::SP);
-            // check if stack is full
-            if sp == MAXIMUM_STACK_ADDR as u8 {
-                panic!("Chip-8: Stack Overflow");
-            }
-            // Increment stack pointer
-            self.write_reg8(Reg8::SP, sp + ADDR_SIZE as u8);
-            // Put current PC on top of stack (store PC at stack pointer)
-            self.write16((sp + ADDR_SIZE as u8) as usize, self.read_reg16(Reg16::PC));
-            // Update PC (JP)
-            self.write_reg16(Reg16::PC, 0x0FFF & i);
-            false
+            self.inst_call(i);
         } else if i & 0xF000 == 0x3000 {
-            // Skip if register Vx equals lower byte
-            let x = (i & 0x0F00) >> 8;
-            let vx = to_general_reg8(x as usize);
-            let lower: u8 = (0x00FF & i) as u8;
-            // Skip instruction
-            if self.read_reg8(vx) == lower {
-                self.skip_next_instruction();
-                false
-            } else {
-                true
-            }
+            self.inst_skip_eq_const(i);
         } else if i & 0xF000 == 0x4000 {
-            // Skip if register Vx neq to lower byte
-            let x = (i & 0x0F00) >> 8;
-            let vx = to_general_reg8(x as usize);
-            let lower = (0x00FF & i) as u8;
-            // Skip instruction
-            if self.read_reg8(vx) != lower {
-                self.skip_next_instruction();
-                false
-            } else {
-                true
-            }
+            self.inst_skip_neq_const(i);
         } else if i & 0xF00F == 0x5000 {
-            // Skip if Vx == Vy
-            let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
-            let vy = to_general_reg8(((i & 0x00F0) >> 4) as usize);
-            if self.read_reg8(vx) == self.read_reg8(vy) {
-                self.skip_next_instruction();
-                false
-            } else {
-                true
-            }
+            self.inst_skip_eq(i);
         } else if i & 0xF000 == 0x6000 {
-            // Put lower byte value into Vx
-            let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
-            let lower = (0x00FF & i) as u8;
-            self.write_reg8(vx, lower);
-            true
+            self.inst_load_const(i);
         } else if i & 0xF000 == 0x7000 {
-            // Vx += lower
-            let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
-            let lower = (0x00FF & i) as u8;
-            let value = self.read_reg8(vx).overflowing_add(lower).0;
-            self.write_reg8(vx, value);
-            true
+            self.inst_add_const(i);
         } else if i & 0xF00F == 0x8000 {
-            // Vx = Vy
-            let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
-            let vy = to_general_reg8(((i & 0x00F0) >> 4) as usize);
-            self.write_reg8(vx, self.read_reg8(vy));
-            true
+            self.inst_assign(i);
         } else if i & 0xF00F == 0x8001 {
-            // Vx |= Vy
-            let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
-            let vy = to_general_reg8(((i & 0x00F0) >> 4) as usize);
-            let value = self.read_reg8(vx) | self.read_reg8(vy);
-            self.write_reg8(vx, value);
-            true
+            self.inst_or(i);
         } else if i & 0xF00F == 0x8002 {
-            // Vx &= Vy
-            let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
-            let vy = to_general_reg8(((i & 0x00F0) >> 4) as usize);
-            let value = self.read_reg8(vx) & self.read_reg8(vy);
-            self.write_reg8(vx, value);
-            true
+            self.inst_and(i);
         } else if i & 0xF00F == 0x8003 {
-            // Vx ^= Vy
-            let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
-            let vy = to_general_reg8(((i & 0x00F0) >> 4) as usize);
-            let value = self.read_reg8(vx) ^ self.read_reg8(vy);
-            self.write_reg8(vx, value);
-            true
+            self.inst_xor(i);
         } else if i & 0xF00F == 0x8004 {
-            // Vx  += Vy and VF = carry
-            let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
-            let vy = to_general_reg8(((i & 0x00F0) >> 4) as usize);
-            let (value, carry) = self.read_reg8(vx).overflowing_add(self.read_reg8(vy));
-            self.write_reg8(vx, value);
-            self.write_reg8(Reg8::VF, carry as u8);
-            true
+            self.inst_add(i);
         } else if i & 0xF00F == 0x8005 {
-            // VF = Vx > Vy (!borrow) and Vx -= Vy
-            let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
-            let vy = to_general_reg8(((i & 0x00F0) >> 4) as usize);
-            let x = self.read_reg8(vx);
-            let y = self.read_reg8(vy);
-            let (value, _) = x.overflowing_sub(y);
-            self.write_reg8(vx, value);
-            // self.write_reg8(Reg8::VF, !borrow as u8);
-            self.write_reg8(Reg8::VF, (x > y) as u8);
-            true
+            self.inst_sub(i);
         } else if i & 0xF00F == 0x8006 {
-            // VF = LSB(Vx) and Vx /= 2
-            let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
-            let x = self.read_reg8(vx);
-            self.write_reg8(Reg8::VF, x & 0x1u8);
-            self.write_reg8(vx, x >> 1);
-            true
+            self.inst_shr(i);
         } else if i & 0xF00F == 0x8007 {
-            // VF = Vy > Vx, Vx = Vy - Vx
-            let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
-            let vy = to_general_reg8(((i & 0x00F0) >> 4) as usize);
-            let x = self.read_reg8(vx);
-            let y = self.read_reg8(vy);
-            let (value, _) = y.overflowing_sub(x);
-            self.write_reg8(vx, value);
-            self.write_reg8(Reg8::VF, (y > x) as u8);
-            true
+            self.inst_subn(i);
         } else if i & 0xF00F == 0x800E {
-            // Vx = Vx << 1 and VF = overflow
-            let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
-            let x = self.read_reg8(vx);
-            self.write_reg8(Reg8::VF, (x >> 7) & 0x1u8);
-            self.write_reg8(vx, x << 1);
-            true
+            self.inst_shl(i);
         } else if i & 0xF00F == 0x9000 {
-            // Skip if Vx != Vy
-            let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
-            let vy = to_general_reg8(((i & 0x00F0) >> 4) as usize);
-            if self.read_reg8(vx) != self.read_reg8(vy) {
-                self.skip_next_instruction();
-                false
-            } else {
-                true
-            }
+            self.inst_skip_neq(i);
         } else if i & 0xF000 == 0xA000 {
-            // I = value
-            self.write_reg16(Reg16::I, i & 0x0FFF);
-            true
+            self.inst_set_i(i);
         } else if i & 0xF000 == 0xB000 {
-            // JP V0 + value
-            let v0 = self.read_reg8(Reg8::V0);
-            self.write_reg16(Reg16::PC, (i & 0x0FFF) + v0 as u16);
-            false
+            self.inst_jp_v0_value(i);
         } else if i & 0xF000 == 0xC000 {
-            //  Vx = random & lower
-            let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
-            let nn = (i & 0x00FF) as u8;
-            let r: u8 = rand::random();
-            self.write_reg8(vx, r & nn);
-            true
+            self.inst_rand(i);
         } else if i & 0xF000 == 0xD000 {
-            // XOR sprite of n bytes at x and y and set VF to 1 if pixel erased
-            let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
-            let vy = to_general_reg8(((i & 0x00F0) >> 4) as usize);
-            let num_bytes = (i & 0x000F) as u8;
-
-            let x = self.read_reg8(vx);
-            let mut draw_y = self.read_reg8(vy);
-
-            let sprite = self.read_reg16(Reg16::I);
-            let mut erased: u8 = 0;
-            let (w, h) = self.get_dimensions();
-            for j in 0..num_bytes {
-                // load byte
-                let mut byte = self.read8(sprite.saturating_add(j as u16) as usize);
-                // assuming that vx,vy corresponds to first byte (top-left corner) of sprite
-                for k in 0..8 {
-                    let draw_x = x.overflowing_add(k).0 % w as u8;
-                    let brightness = if (byte & (0x1u8 << 7)) > 0 {
-                        u8::MAX
-                    } else {
-                        0u8
-                    };
-                    erased |= self.draw(draw_x as usize, draw_y as usize, brightness);
-                    byte <<= 1;
-                }
-                draw_y = draw_y.overflowing_add(1).0 % h as u8;
-            }
-            self.write_reg8(Reg8::VF, erased);
-            true
+            self.inst_draw_sprite(i);
         } else if i & 0xF0FF == 0xE09E {
-            // Skip if Vx is pressed
-            let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
-            let value = self.read_reg8(vx);
-            let kb = self.read_reg16(Reg16::KB);
-
-            if kb & (1u16 << value) == (1u16 << value) {
-                self.skip_next_instruction();
-                false
-            } else {
-                true
-            }
+            self.inst_skip_pressed(i);
         } else if i & 0xF0FF == 0xE0A1 {
-            // Skip if Vx is not pressed
-            let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
-            let value = self.read_reg8(vx);
-            let kb = self.read_reg16(Reg16::KB);
-
-            if kb & (1u16 << value) != (1u16 << value) {
-                self.skip_next_instruction();
-                false
-            } else {
-                true
-            }
+            self.inst_skip_not_pressed(i);
         } else if i & 0xF0FF == 0xF007 {
-            // Vx = DT
-            let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
-            let dt = self.read_reg8(Reg8::DT);
-            self.write_reg8(vx, dt);
-            true
+            self.inst_read_dt(i);
         } else if i & 0xF0FF == 0xF00A {
-            // Wait for key press and store key value in Vx
-            // This should only trigger for new key presses
-            let mut kb = self.read_reg16(Reg16::KB);
-            let pkb = self.read_reg16(Reg16::PK);
-            let mut value = 0;
-            while kb > 0 {
-                kb >>= 1;
-                value += 1;
-            }
-            // If there was a *new* key press
-            if value > 0 && ((0x1 << (value - 1)) & pkb) == 0 {
-                let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
-                self.write_reg8(vx, value - 1);
-                true
-            } else {
-                false
-            }
+            self.inst_wait_for_key(i);
         } else if i & 0xF0FF == 0xF015 {
-            // DT = Vx
-            let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
-            self.write_reg8(Reg8::DT, self.read_reg8(vx));
-            true
+            self.inst_set_dt(i);
         } else if i & 0xF0FF == 0xF018 {
-            // ST = Vx
-            let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
-            self.write_reg8(Reg8::ST, self.read_reg8(vx));
-            true
+            self.inst_set_st(i);
         } else if i & 0xF0FF == 0xF01E {
-            // I += Vx
-            let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
-            let x = self.read_reg8(vx);
-            let value = self.read_reg16(Reg16::I);
-            self.write_reg16(Reg16::I, value.overflowing_add(x as u16).0);
-            true
+            self.inst_add_vx_to_i(i);
         } else if i & 0xF0FF == 0xF029 {
-            // I = sprite for Vx
-            let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
-            let digit = self.read_reg8(vx);
-            let location = Self::get_digit_location(digit);
-            self.write_reg16(Reg16::I, location);
-            true
+            self.inst_get_sprite_location(i);
         } else if i & 0xF0FF == 0xF033 {
             self.inst_store_bcd(i);
-            true
         } else if i & 0xF0FF == 0xF055 {
-            // write v0-vx into memory starting at I
-            let start = self.read_reg16(Reg16::I);
-            let x = (i & 0x0F00) >> 8;
-            for j in 0..=x {
-                // Read value
-                let register = to_general_reg8(j as usize);
-                let value = self.read_reg8(register);
-                // store
-                self.write8((start + j) as usize, value);
-            }
-            true
+            self.inst_store_registers(i);
         } else if i & 0xF0FF == 0xF065 {
-            // read memory from I into v0-vx
-            let start = self.read_reg16(Reg16::I);
-            let x = (i & 0x0F00) >> 8;
-            for j in 0..=x {
-                // Read jth value and store at register j
-                let value = self.read8((start + j) as usize);
-                let register = to_general_reg8(j as usize);
-                self.write_reg8(register, value);
-            }
-            true
+            self.inst_load_registers(i);
         } else {
-            // self.do_something();
             panic!("Chip-8: Invalid instruction {:X}", i);
         };
-        if advance_pc {
-            self.increment_pc();
-        }
     }
 
     /// Call at ~500 Hz
