@@ -3,17 +3,9 @@ use winit::event::VirtualKeyCode;
 mod audio;
 use audio::Buzzer;
 
-fn blit_ru8_to_rgbau8(src: &[u8], dst: &mut [u8]) {
-    assert_eq!(src.len() * 4, dst.len());
-    let colors = [[0x38, 0x2B, 0x26], [0xB8, 0xC2, 0xB9]];
-    src.iter().enumerate().for_each(|(i, pixel)| {
-        let c = (0x1 & *pixel) as usize;
-        dst[4 * i] = colors[c][0];
-        dst[4 * i + 1] = colors[c][1];
-        dst[4 * i + 2] = colors[c][2];
-        dst[4 * i + 3] = u8::MAX;
-    });
-}
+const LOGIC_DT: f64 = 1.0 / 500.0;
+const TIMER_DT: f64 = 1.0 / 60.0;
+
 fn main() {
     println!("Loading rom...");
     let args: Vec<String> = std::env::args().collect();
@@ -56,8 +48,7 @@ fn main() {
     let mut time = std::time::Instant::now();
     let mut logic_accum = 0.0;
     let mut timer_accum = 0.0;
-    const LOGIC_DT: f64 = 1.0 / 500.0;
-    const TIMER_DT: f64 = 1.0 / 60.0;
+
     event_loop.run(move |event, _, control_flow| match event {
         winit::event::Event::WindowEvent {
             window_id: _,
@@ -129,5 +120,17 @@ fn main() {
             pixels.render().expect("Error rendering display.");
         }
         _ => {}
+    });
+}
+
+fn blit_ru8_to_rgbau8(src: &[u8], dst: &mut [u8]) {
+    assert_eq!(src.len() * 4, dst.len());
+    let colors = [[0x38, 0x2B, 0x26], [0xB8, 0xC2, 0xB9]];
+    src.iter().enumerate().for_each(|(i, pixel)| {
+        let c = (0x1 & *pixel) as usize;
+        dst[4 * i] = colors[c][0];
+        dst[4 * i + 1] = colors[c][1];
+        dst[4 * i + 2] = colors[c][2];
+        dst[4 * i + 3] = u8::MAX;
     });
 }

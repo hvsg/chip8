@@ -1,3 +1,4 @@
+mod instructions;
 /// Big Endian
 /// Each address refers to a single byte
 /// last byte is at index 4095
@@ -90,7 +91,7 @@ pub enum Reg8 {
 }
 
 /// Convert unsize to general purpose register (V0-VF)
-fn to_general_reg8(x: usize) -> Reg8 {
+pub fn to_general_reg8(x: usize) -> Reg8 {
     let x = x + Reg8::V0 as usize;
     assert!(x >= Reg8::V0 as usize);
     assert!(x <= Reg8::VF as usize);
@@ -132,6 +133,18 @@ impl Chip8 {
         // Load sprites
         s.load_sprites();
         s
+    }
+
+    /// Increments Program Counter once
+    pub fn increment_pc(&mut self) {
+        let pc = self.read_reg16(Reg16::PC);
+        self.write_reg16(Reg16::PC, pc + ADDR_SIZE);
+    }
+
+    /// Increments Program Counter twice
+    pub fn skip_next_instruction(&mut self) {
+        let pc = self.read_reg16(Reg16::PC);
+        self.write_reg16(Reg16::PC, pc + 2 * ADDR_SIZE);
     }
 
     /// Returns slice to screen texture in format of monochromatic single byte texture.
@@ -307,8 +320,7 @@ impl Chip8 {
             let lower: u8 = (0x00FF & i) as u8;
             // Skip instruction
             if self.read_reg8(vx) == lower {
-                let pc = self.read_reg16(Reg16::PC);
-                self.write_reg16(Reg16::PC, pc + 2 * ADDR_SIZE);
+                self.skip_next_instruction();
                 false
             } else {
                 true
@@ -320,8 +332,7 @@ impl Chip8 {
             let lower = (0x00FF & i) as u8;
             // Skip instruction
             if self.read_reg8(vx) != lower {
-                let pc = self.read_reg16(Reg16::PC);
-                self.write_reg16(Reg16::PC, pc + 2 * ADDR_SIZE);
+                self.skip_next_instruction();
                 false
             } else {
                 true
@@ -331,8 +342,7 @@ impl Chip8 {
             let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
             let vy = to_general_reg8(((i & 0x00F0) >> 4) as usize);
             if self.read_reg8(vx) == self.read_reg8(vy) {
-                let pc = self.read_reg16(Reg16::PC);
-                self.write_reg16(Reg16::PC, pc + 2 * ADDR_SIZE);
+                self.skip_next_instruction();
                 false
             } else {
                 true
@@ -411,7 +421,6 @@ impl Chip8 {
             let y = self.read_reg8(vy);
             let (value, _) = y.overflowing_sub(x);
             self.write_reg8(vx, value);
-            // self.write_reg8(Reg8::VF, !underflow as u8);
             self.write_reg8(Reg8::VF, (y > x) as u8);
             true
         } else if i & 0xF00F == 0x800E {
@@ -426,8 +435,7 @@ impl Chip8 {
             let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
             let vy = to_general_reg8(((i & 0x00F0) >> 4) as usize);
             if self.read_reg8(vx) != self.read_reg8(vy) {
-                let pc = self.read_reg16(Reg16::PC);
-                self.write_reg16(Reg16::PC, pc + 2 * ADDR_SIZE);
+                self.skip_next_instruction();
                 false
             } else {
                 true
@@ -485,8 +493,7 @@ impl Chip8 {
             let kb = self.read_reg16(Reg16::KB);
 
             if kb & (1u16 << value) == (1u16 << value) {
-                let pc = self.read_reg16(Reg16::PC);
-                self.write_reg16(Reg16::PC, pc + 2 * ADDR_SIZE);
+                self.skip_next_instruction();
                 false
             } else {
                 true
@@ -498,8 +505,7 @@ impl Chip8 {
             let kb = self.read_reg16(Reg16::KB);
 
             if kb & (1u16 << value) != (1u16 << value) {
-                let pc = self.read_reg16(Reg16::PC);
-                self.write_reg16(Reg16::PC, pc + 2 * ADDR_SIZE);
+                self.skip_next_instruction();
                 false
             } else {
                 true
@@ -521,7 +527,6 @@ impl Chip8 {
                 value += 1;
             }
             // If there was a *new* key press
-            // let mask: u8 =
             if value > 0 && ((0x1 << (value - 1)) & pkb) == 0 {
                 let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
                 self.write_reg8(vx, value - 1);
@@ -554,16 +559,7 @@ impl Chip8 {
             self.write_reg16(Reg16::I, location);
             true
         } else if i & 0xF0FF == 0xF033 {
-            // Store BCD representation of Vx starting at I
-            let vx = to_general_reg8(((i & 0x0F00) >> 8) as usize);
-            let mut value = self.read_reg8(vx);
-            let start = self.read_reg16(Reg16::I);
-            let h = value / 100;
-            self.write8(start as usize, h);
-            value -= h * 100;
-            let t = value / 10;
-            self.write8((start + 1) as usize, t);
-            self.write8((start + 2) as usize, value - t * 10);
+            self.inst_store_bcd(i);
             true
         } else if i & 0xF0FF == 0xF055 {
             // write v0-vx into memory starting at I
@@ -582,19 +578,18 @@ impl Chip8 {
             let start = self.read_reg16(Reg16::I);
             let x = (i & 0x0F00) >> 8;
             for j in 0..=x {
-                // Read value
+                // Read jth value and store at register j
                 let value = self.read8((start + j) as usize);
-                // store
                 let register = to_general_reg8(j as usize);
                 self.write_reg8(register, value);
             }
             true
         } else {
+            // self.do_something();
             panic!("Chip-8: Invalid instruction {:X}", i);
         };
         if advance_pc {
-            let pc = self.read_reg16(Reg16::PC);
-            self.write_reg16(Reg16::PC, pc + ADDR_SIZE);
+            self.increment_pc();
         }
     }
 
@@ -621,7 +616,6 @@ impl Chip8 {
         let st = self.read_reg8(Reg8::ST);
         if st > 0 {
             self.write_reg8(Reg8::ST, st - 1);
-            // TODO: Play tone
         }
     }
 }
