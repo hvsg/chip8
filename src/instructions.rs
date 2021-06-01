@@ -3,12 +3,12 @@ use crate::Chip8;
 use crate::{Reg16, Reg8, ADDR_SIZE, MAXIMUM_STACK_ADDR, STACK_ADDR};
 
 impl Chip8 {
-    pub(crate) fn inst_cls(&mut self, i: u16) {
+    pub(crate) fn inst_cls(&mut self) {
         // CLS
         self.clear_screen();
         self.increment_pc();
     }
-    pub(crate) fn inst_ret(&mut self, i: u16) {
+    pub(crate) fn inst_ret(&mut self) {
         // RET
         // Check if stack is empty
         let sp = self.read_reg8(Reg8::SP);

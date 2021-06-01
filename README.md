@@ -1,6 +1,6 @@
 # Chip-8 Interpreter
 
-Written in Rust without viewing tutorials or other implementations.
+Written in Rust, no emulator specific tutorials were used.
 Supports regular 64x32 Chip-8 programs and some HiRes 64x64 Chip-8 programs.
 The 1-bit color palette is from [here](https://lospec.com/palette-list/paperback-2).
 ## Usage
@@ -13,16 +13,18 @@ Many ROMs available on GitHub.
 
 ## Controls
 Valid keys are 0-9 (row or numpad) and A-F.
+Press ESC or close window to exit.
 
 ## Known Issues
-There may be some bugs since some parts of the specification are unclear and expected behaviour between test ROMs differ.
-The buzzer audio seems to work on Linux but not Windows.
+- Some test ROMs expect different behaviour from the technical reference
+- The buzzer audio seems to work on Linux but not Windows
 
-## Library Documentation
-If needed the package can be built as a library. To view documentation run `cargo doc --open`.
+## Library
+The package can be built as a library. To view documentation run `cargo doc --open`.
 
 ## Tests
-Tests are implemented for instructions with most significant 4-bits 0-C (up to Cxnn). Run tests with `cargo test`.
+Tests are implemented for instructions with most significant 4-bits in range 0-C (up to Cxnn). 
+Run tests with `cargo test`.
 
 ## References
  - Cowgod's Chip-8 Technical Reference

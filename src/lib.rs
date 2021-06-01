@@ -284,8 +284,8 @@ impl Chip8 {
     fn execute_instruction(&mut self, i: u16) {
         match (i & 0xF000) >> 12 {
             0 => match i {
-                0x00E0 | 0x230 => self.inst_cls(i),
-                0x00EE => self.inst_ret(i),
+                0x00E0 | 0x230 => self.inst_cls(),
+                0x00EE => self.inst_ret(),
                 _ => invalid(i),
             },
             1 => self.inst_jp(i),
@@ -336,7 +336,7 @@ impl Chip8 {
                 _ => invalid(i),
             },
 
-            _ => panic!("Chip-8: Invalid instruction {:X}", i),
+            _ => invalid(i),
         }
     }
 
