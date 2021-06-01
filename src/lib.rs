@@ -90,6 +90,10 @@ pub enum Reg8 {
     ST,
 }
 
+fn invalid(i: u16) {
+    panic!("Chip-8: Invalid instruction {:X}", i);
+}
+
 /// Convert unsize to general purpose register (V0-VF)
 pub fn to_general_reg8(x: usize) -> Reg8 {
     let x = x + Reg8::V0 as usize;
@@ -278,77 +282,62 @@ impl Chip8 {
 
     /// Execute instruction i
     fn execute_instruction(&mut self, i: u16) {
-        if i == 0x00E0 || i == 0x230 {
-            self.inst_cls(i);
-        } else if i == 0x00EE {
-            self.inst_ret(i);
-        } else if i & 0xF000 == 0x1000 {
-            self.inst_jp(i);
-        } else if i & 0xF000 == 0x2000 {
-            self.inst_call(i);
-        } else if i & 0xF000 == 0x3000 {
-            self.inst_skip_eq_const(i);
-        } else if i & 0xF000 == 0x4000 {
-            self.inst_skip_neq_const(i);
-        } else if i & 0xF00F == 0x5000 {
-            self.inst_skip_eq(i);
-        } else if i & 0xF000 == 0x6000 {
-            self.inst_load_const(i);
-        } else if i & 0xF000 == 0x7000 {
-            self.inst_add_const(i);
-        } else if i & 0xF00F == 0x8000 {
-            self.inst_assign(i);
-        } else if i & 0xF00F == 0x8001 {
-            self.inst_or(i);
-        } else if i & 0xF00F == 0x8002 {
-            self.inst_and(i);
-        } else if i & 0xF00F == 0x8003 {
-            self.inst_xor(i);
-        } else if i & 0xF00F == 0x8004 {
-            self.inst_add(i);
-        } else if i & 0xF00F == 0x8005 {
-            self.inst_sub(i);
-        } else if i & 0xF00F == 0x8006 {
-            self.inst_shr(i);
-        } else if i & 0xF00F == 0x8007 {
-            self.inst_subn(i);
-        } else if i & 0xF00F == 0x800E {
-            self.inst_shl(i);
-        } else if i & 0xF00F == 0x9000 {
-            self.inst_skip_neq(i);
-        } else if i & 0xF000 == 0xA000 {
-            self.inst_set_i(i);
-        } else if i & 0xF000 == 0xB000 {
-            self.inst_jp_v0_value(i);
-        } else if i & 0xF000 == 0xC000 {
-            self.inst_rand(i);
-        } else if i & 0xF000 == 0xD000 {
-            self.inst_draw_sprite(i);
-        } else if i & 0xF0FF == 0xE09E {
-            self.inst_skip_pressed(i);
-        } else if i & 0xF0FF == 0xE0A1 {
-            self.inst_skip_not_pressed(i);
-        } else if i & 0xF0FF == 0xF007 {
-            self.inst_read_dt(i);
-        } else if i & 0xF0FF == 0xF00A {
-            self.inst_wait_for_key(i);
-        } else if i & 0xF0FF == 0xF015 {
-            self.inst_set_dt(i);
-        } else if i & 0xF0FF == 0xF018 {
-            self.inst_set_st(i);
-        } else if i & 0xF0FF == 0xF01E {
-            self.inst_add_vx_to_i(i);
-        } else if i & 0xF0FF == 0xF029 {
-            self.inst_get_sprite_location(i);
-        } else if i & 0xF0FF == 0xF033 {
-            self.inst_store_bcd(i);
-        } else if i & 0xF0FF == 0xF055 {
-            self.inst_store_registers(i);
-        } else if i & 0xF0FF == 0xF065 {
-            self.inst_load_registers(i);
-        } else {
-            panic!("Chip-8: Invalid instruction {:X}", i);
-        };
+        match (i & 0xF000) >> 12 {
+            0 => match i {
+                0x00E0 | 0x230 => self.inst_cls(i),
+                0x00EE => self.inst_ret(i),
+                _ => invalid(i),
+            },
+            1 => self.inst_jp(i),
+            2 => self.inst_call(i),
+            3 => self.inst_skip_eq_const(i),
+            4 => self.inst_skip_neq_const(i),
+            5 => match i & 0xF {
+                0 => self.inst_skip_eq(i),
+                _ => invalid(i),
+            },
+            6 => self.inst_load_const(i),
+            7 => self.inst_add_const(i),
+            8 => match i & 0xF {
+                0 => self.inst_assign(i),
+                1 => self.inst_or(i),
+                2 => self.inst_and(i),
+                3 => self.inst_xor(i),
+                4 => self.inst_add(i),
+                5 => self.inst_sub(i),
+                6 => self.inst_shr(i),
+                7 => self.inst_subn(i),
+                0xE => self.inst_shl(i),
+                _ => invalid(i),
+            },
+            9 => match i & 0xF {
+                0 => self.inst_skip_neq(i),
+                _ => invalid(i),
+            },
+            0xA => self.inst_set_i(i),
+            0xB => self.inst_jp_v0_value(i),
+            0xC => self.inst_rand(i),
+            0xD => self.inst_draw_sprite(i),
+            0xE => match i & 0xFF {
+                0x9E => self.inst_skip_pressed(i),
+                0xA1 => self.inst_skip_not_pressed(i),
+                _ => invalid(i),
+            },
+            0xF => match i & 0xFF {
+                0x07 => self.inst_read_dt(i),
+                0x0A => self.inst_wait_for_key(i),
+                0x15 => self.inst_set_dt(i),
+                0x18 => self.inst_set_st(i),
+                0x1E => self.inst_add_vx_to_i(i),
+                0x29 => self.inst_get_sprite_location(i),
+                0x33 => self.inst_store_bcd(i),
+                0x55 => self.inst_store_registers(i),
+                0x65 => self.inst_load_registers(i),
+                _ => invalid(i),
+            },
+
+            _ => panic!("Chip-8: Invalid instruction {:X}", i),
+        }
     }
 
     /// Call at ~500 Hz
