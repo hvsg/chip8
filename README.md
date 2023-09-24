@@ -1,5 +1,7 @@
 # Chip-8 Interpreter
 
+![Screenshot of the interpreter running the Cavern ROM.](images/chip8-cavern.png)
+
 Written in Rust, no emulator specific tutorials were used.
 Supports regular 64x32 Chip-8 programs and some HiRes 64x64 Chip-8 programs.
 The 1-bit color palette is from [here](https://lospec.com/palette-list/paperback-2).
