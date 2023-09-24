@@ -59,7 +59,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 *control_flow = winit::event_loop::ControlFlow::Exit;
             }
             winit::event::WindowEvent::Resized(physical_size) => {
-                if !pixels.resize_surface(physical_size.width, physical_size.height).is_ok() {
+                if pixels.resize_surface(physical_size.width, physical_size.height).is_err() {
                     *control_flow = winit::event_loop::ControlFlow::Exit;
                 }
             }

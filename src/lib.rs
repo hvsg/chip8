@@ -270,12 +270,12 @@ impl Chip8 {
 
     /// Read 8 bit value at address
     fn read8(&self, address: usize) -> u8 {
-        self.memory[address as usize]
+        self.memory[address]
     }
 
     /// Write 8 bit value at address
     fn write8(&mut self, address: usize, value: u8) {
-        self.memory[address as usize] = value;
+        self.memory[address] = value;
     }
 
     /// Read 16 bit value at address
