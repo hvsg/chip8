@@ -13,7 +13,7 @@ Many ROMs available on GitHub.
 
 ## Controls
 Valid keys are 0-9 (row or numpad) and A-F.
-Press ESC or close window to exit.
+Press ESC or close window to exit. To reset, press R.
 
 ## Known Issues
 - Some test ROMs expect different behaviour from the technical reference

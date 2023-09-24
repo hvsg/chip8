@@ -139,6 +139,18 @@ impl Chip8 {
         s
     }
 
+    pub fn reset(&mut self) {
+
+        self.memory = [0; MEMORY_SIZE];
+        self.display = Vec::new();
+        self.dimensions = (0, 0);
+        // Initialize registers
+        self.write_reg16(Reg16::PC, PROGRAM_START_ADDR as u16);
+        self.write_reg8(Reg8::SP, (STACK_ADDR - ADDR_SIZE as usize) as u8);
+        // Load sprites
+        self.load_sprites();
+    }
+
     /// Increments Program Counter once
     pub fn increment_pc(&mut self) {
         let pc = self.read_reg16(Reg16::PC);

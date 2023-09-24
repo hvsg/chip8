@@ -86,6 +86,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         VirtualKeyCode::D => 0xD,
                         VirtualKeyCode::E => 0xE,
                         VirtualKeyCode::F => 0xF,
+                        VirtualKeyCode::R => {
+                            chip8.reset();
+                            chip8.load_rom(rom.as_slice());
+                            0xFF
+                        }
                         VirtualKeyCode::Escape => {
                             *control_flow = winit::event_loop::ControlFlow::Exit;
                             0xFF
