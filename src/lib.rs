@@ -140,7 +140,6 @@ impl Chip8 {
     }
 
     pub fn reset(&mut self) {
-
         self.memory = [0; MEMORY_SIZE];
         self.display = Vec::new();
         self.dimensions = (0, 0);
