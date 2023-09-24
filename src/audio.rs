@@ -1,5 +1,4 @@
-use cpal::traits::{DeviceTrait, HostTrait};
-use std::mem::ManuallyDrop;
+use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -10,7 +9,7 @@ pub struct Buzzer {
 }
 
 impl Buzzer {
-    pub fn new(frequency: u32) -> Self {
+    pub fn new(frequency: u32) -> Result<Self, Box<dyn std::error::Error>> {
         let active = Arc::new(AtomicBool::new(false));
         let stream_active = active.clone();
 
@@ -27,24 +26,26 @@ impl Buzzer {
             println!("config: {:?}", config);
             println!("Starting audio stream!");
             let stream = match config.sample_format() {
-                cpal::SampleFormat::F32 => {
-                    start_stream::<f32>(&device, config, stream_active, frequency)
-                }
-                cpal::SampleFormat::I16 => {
-                    start_stream::<i16>(&device, config, stream_active, frequency)
-                }
-                cpal::SampleFormat::U16 => {
-                    start_stream::<u16>(&device, config, stream_active, frequency)
-                }
+                cpal::SampleFormat::F64 => start_stream::<f64>(&device, config, stream_active, frequency),
+                cpal::SampleFormat::F32 => start_stream::<f32>(&device, config, stream_active, frequency),
+                cpal::SampleFormat::I64 => start_stream::<i64>(&device, config, stream_active, frequency),
+                cpal::SampleFormat::I32 => start_stream::<i32>(&device, config, stream_active, frequency),
+                cpal::SampleFormat::I16 => start_stream::<i16>(&device, config, stream_active, frequency),
+                cpal::SampleFormat::I8 => start_stream::<i8>(&device, config, stream_active, frequency),
+                cpal::SampleFormat::U64 => start_stream::<u64>(&device, config, stream_active, frequency),
+                cpal::SampleFormat::U32 => start_stream::<u32>(&device, config, stream_active, frequency),
+                cpal::SampleFormat::U16 => start_stream::<u16>(&device, config, stream_active, frequency),
+                cpal::SampleFormat::U8 => start_stream::<u8>(&device, config, stream_active, frequency),
+                _ => {eprintln!("Unsupported audio format!"); return;}
             };
-            let stream = ManuallyDrop::new(stream);
+  
+            stream.play();
             println!("Parking audio thread!");
             std::thread::park();
             println!("Terminating audio thread!");
-            ManuallyDrop::into_inner(stream);
         });
 
-        Buzzer { active, thread }
+        Ok(Buzzer { active, thread })
     }
     pub fn set_active(&mut self, active: bool) {
         self.active.store(active, Ordering::SeqCst)
@@ -57,7 +58,7 @@ impl Drop for Buzzer {
     }
 }
 
-fn start_stream<T: cpal::Sample>(
+fn start_stream<T: cpal::SizedSample + cpal::FromSample<f32>>(
     device: &cpal::Device,
     config: cpal::SupportedStreamConfig,
     stream_active: Arc<AtomicBool>,
@@ -77,9 +78,14 @@ fn start_stream<T: cpal::Sample>(
                     0.0
                 };
 
+                // let multiplier = 0.5;
+
                 data.chunks_mut(channels as usize).for_each(|frame| {
                     let value = multiplier * wave[offset];
-                    let converted = cpal::Sample::from(&value);
+                    // let converted = cpal::Sample::from(&value);
+                    // let converted = value.to_sample::<T>();
+                    // let converted = value;
+                    let converted = T::from_sample(value);
                     offset = (offset + 1) % wave.len();
                     for sample in frame.iter_mut() {
                         *sample = converted;
@@ -87,7 +93,8 @@ fn start_stream<T: cpal::Sample>(
                 });
             },
             move |err| eprintln!("Audio Output Stream Error: {}", err),
-        )
+        None
+    )
         .expect("Failed to build output audio stream!")
 }
 

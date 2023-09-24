@@ -6,12 +6,12 @@ use audio::Buzzer;
 const LOGIC_DT: f64 = 1.0 / 500.0;
 const TIMER_DT: f64 = 1.0 / 60.0;
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Loading rom...");
     let args: Vec<String> = std::env::args().collect();
     if args.len() != 2 {
         println!("Please provide a single argument as a path to the rom.");
-        return;
+        Err("No rom path!")?
     }
     let rom = std::fs::read(&args[1]).expect("Failed to read rom at path");
 
@@ -44,7 +44,7 @@ fn main() {
         .build()
         .expect("Failed to create pixel buffer");
 
-    let mut buzzer = Buzzer::new(1046);
+    let mut buzzer = Buzzer::new(1046)?;
 
     let mut time = std::time::Instant::now();
     let mut logic_accum = 0.0;

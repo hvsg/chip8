@@ -17,7 +17,6 @@ Press ESC or close window to exit.
 
 ## Known Issues
 - Some test ROMs expect different behaviour from the technical reference
-- The buzzer audio seems to work on Linux but not Windows
 
 ## Library
 The package can be built as a library. To view documentation run `cargo doc --open`.
