@@ -25,7 +25,6 @@ fn main() {
         .with_title("Chip-8 Interpreter")
         .build(&event_loop)
         .expect("Failed to create window.");
-
     let scale_factor = 0.1;
     let logical_size = physical_size.to_logical::<f64>(scale_factor);
     window.set_inner_size(logical_size);
@@ -35,10 +34,12 @@ fn main() {
         logical_size.height.round() as u32,
         &window,
     );
+
     let mut pixels = pixels::PixelsBuilder::new(w as u32, h as u32, texture)
         .request_adapter_options(pixels::wgpu::RequestAdapterOptions {
             compatible_surface: None,
             power_preference: pixels::wgpu::PowerPreference::HighPerformance,
+            force_fallback_adapter: false,
         })
         .build()
         .expect("Failed to create pixel buffer");
@@ -58,7 +59,9 @@ fn main() {
                 *control_flow = winit::event_loop::ControlFlow::Exit;
             }
             winit::event::WindowEvent::Resized(physical_size) => {
-                pixels.resize_surface(physical_size.width, physical_size.height);
+                if !pixels.resize_surface(physical_size.width, physical_size.height).is_ok() {
+                    *control_flow = winit::event_loop::ControlFlow::Exit;
+                }
             }
             winit::event::WindowEvent::KeyboardInput {
                 device_id: _,
@@ -106,7 +109,7 @@ fn main() {
 
             while logic_accum >= LOGIC_DT {
                 chip8.update_logic();
-                blit_ru8_to_rgbau8(chip8.get_screen_texture(), pixels.get_frame());
+                blit_ru8_to_rgbau8(chip8.get_screen_texture(), pixels.frame_mut());
                 window.request_redraw();
                 logic_accum -= LOGIC_DT;
             }
